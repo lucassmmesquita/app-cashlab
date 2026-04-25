@@ -1,0 +1,56 @@
+# ========================
+# CashLab — .gitignore
+# ========================
+
+# === Environment / Secrets ===
+.env
+.env.local
+.env.*.local
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+*.egg
+
+# === Node / Expo ===
+node_modules/
+.expo/
+npm-debug.log*
+yarn-error.log*
+
+# === iOS / Android builds ===
+cashlab-app/ios/
+cashlab-app/android/
+
+# === Database ===
+*.db
+*.sqlite
+*.sqlite3
+
+# === Uploads (user files) ===
+cashlab-api/uploads/*.pdf
+cashlab-api/uploads/*.png
+cashlab-api/uploads/*.jpg
+cashlab-api/uploads/*.jpeg
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# === OS ===
+Thumbs.db
+
+# === Misc ===
+*.log
+.front.pid
+.back.pid

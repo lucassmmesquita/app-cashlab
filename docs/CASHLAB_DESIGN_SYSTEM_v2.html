@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CashLab — Design System v2.0</title>
+<style>
+:root {
+  --bg:#F2F2F7;--surface:#FFFFFF;--label:#000000;--sl:rgba(60,60,67,0.6);--tl:rgba(60,60,67,0.3);
+  --sep:rgba(60,60,67,0.29);--blue:#007AFF;--green:#34C759;--red:#FF3B30;--orange:#FF9500;
+  --yellow:#FFCC00;--purple:#AF52DE;--pink:#FF2D55;--teal:#5AC8FA;--indigo:#5856D6;--gray:#8E8E93;
+  --segBg:rgba(118,118,128,0.12);--segActive:#FFFFFF;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#000;--surface:#1C1C1E;--label:#FFF;--sl:rgba(235,235,245,0.6);--tl:rgba(235,235,245,0.3);
+  --sep:rgba(84,84,88,0.65);--blue:#0A84FF;--green:#30D158;--red:#FF453A;--orange:#FF9F0A;
+  --yellow:#FFD60A;--purple:#BF5AF2;--pink:#FF375F;--teal:#64D2FF;--indigo:#5E5CE6;
+  --segBg:rgba(118,118,128,0.24);--segActive:#636366;
+}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display',system-ui,sans-serif;background:var(--bg);color:var(--label);-webkit-font-smoothing:antialiased}
+.page{max-width:900px;margin:0 auto;padding:24px 16px 80px}
+
+/* Hero */
+.hero{padding:48px 0 32px;text-align:center}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:var(--surface);padding:4px 14px;border-radius:999px;font-size:12px;color:var(--sl);margin-bottom:16px}
+.hero-badge span{width:8px;height:8px;border-radius:50%;background:var(--green)}
+.hero h1{font-size:40px;font-weight:800;letter-spacing:-1.5px;margin-bottom:4px}
+.hero p{font-size:15px;color:var(--sl)}
+
+/* Nav */
+.nav{position:sticky;top:0;z-index:100;background:var(--bg);padding:8px 0;margin-bottom:24px}
+.seg{display:flex;background:var(--segBg);border-radius:8px;padding:2px;max-width:600px;margin:0 auto}
+.seg button{flex:1;padding:7px 0;font-family:inherit;font-size:13px;font-weight:500;color:var(--sl);background:none;border:none;border-radius:7px;cursor:pointer;transition:all .2s}
+.seg button.on{background:var(--segActive);color:var(--label);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+/* Sections */
+.sec{display:none}.sec.on{display:block;animation:fi .25s ease}
+@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.sh{margin-bottom:24px}
+.sh h2{font-size:28px;font-weight:700;letter-spacing:-.5px}
+.sh p{font-size:14px;color:var(--sl);margin-top:4px}
+.sub{margin-bottom:36px}
+.sub-t{font-size:11px;font-weight:600;color:var(--tl);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;padding:0 4px}
+
+/* Cards (iOS grouped style) */
+.card{background:var(--surface);border-radius:10px;overflow:hidden;margin-bottom:8px}
+.card-pad{padding:16px}
+.card-title{font-size:13px;color:var(--sl);font-weight:400;margin-bottom:4px}
+.card-value{font-size:34px;font-weight:700;letter-spacing:-1px}
+
+/* List rows */
+.row{display:flex;align-items:center;padding:12px 16px;position:relative}
+.row+.row::before{content:'';position:absolute;top:0;left:52px;right:0;height:.5px;background:var(--sep)}
+.row-icon{width:36px;height:36px;border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-right:12px;flex-shrink:0}
+.row-body{flex:1;min-width:0}
+.row-title{font-size:15px;font-weight:500;color:var(--label)}
+.row-sub{font-size:12px;color:var(--sl);margin-top:1px}
+.row-right{text-align:right;margin-left:8px;flex-shrink:0}
+.row-val{font-size:15px;font-weight:600;color:var(--label)}
+.row-pct{font-size:11px;color:var(--tl);margin-top:1px}
+.row-chev{font-size:14px;color:var(--tl);margin-left:6px}
+
+/* Color swatches */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.sw{border-radius:10px;padding:14px;min-height:72px;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer;transition:transform .15s}
+.sw:active{transform:scale(.97)}
+.sw-n{font-size:12px;font-weight:600}.sw-h{font-size:10px;opacity:.7;margin-top:2px;font-family:'SF Mono',monospace}
+
+/* Member cards */
+.mem-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.mem{border-radius:10px;padding:16px;display:flex;align-items:center;gap:12px}
+.mem-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:#fff;flex-shrink:0}
+.mem-name{font-size:15px;font-weight:600}.mem-role{font-size:12px;color:var(--sl);margin-top:1px}
+
+/* Category dots */
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.cat-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:var(--surface);font-size:13px;font-weight:500}
+.cat-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+
+/* Typography scale */
+.type-row{display:flex;align-items:baseline;justify-content:space-between;padding:12px 0;border-bottom:.5px solid var(--sep)}
+.type-row:last-child{border-bottom:none}
+.type-meta{flex-shrink:0;text-align:right}
+.type-tok{font-size:11px;font-weight:600;color:var(--blue);font-family:'SF Mono',monospace}
+.type-spec{font-size:10px;color:var(--tl);margin-top:1px}
+
+/* Spacing bars */
+.sp-row{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.sp-bar{height:20px;border-radius:4px;background:var(--blue);transition:width .6s ease}
+.sp-label{font-size:12px;font-weight:600;color:var(--sl);min-width:36px}
+.sp-val{font-size:11px;color:var(--tl);font-family:'SF Mono',monospace;min-width:30px}
+
+/* Radius */
+.rad-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px}
+.rad{aspect-ratio:1;border:1.5px solid var(--blue);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;opacity:.5;transition:opacity .2s}
+.rad:hover{opacity:1}
+.rad-l{font-size:11px;font-weight:600;color:var(--blue)}
+.rad-v{font-size:10px;color:var(--tl);font-family:'SF Mono',monospace}
+
+/* Buttons */
+.btn-primary{width:100%;max-width:320px;height:50px;background:var(--blue);color:#fff;border:none;border-radius:12px;font-family:inherit;font-size:17px;font-weight:600;cursor:pointer;transition:all .15s}
+.btn-primary:active{opacity:.85;transform:scale(.98)}
+.btn-secondary{background:none;border:none;color:var(--blue);font-family:inherit;font-size:17px;cursor:pointer;padding:8px 0}
+.btn-destructive{background:none;border:none;color:var(--red);font-family:inherit;font-size:15px;cursor:pointer;padding:8px 0}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:600}
+
+/* Progress */
+.prog-track{height:4px;background:var(--segBg);border-radius:2px;overflow:hidden}
+.prog-fill{height:100%;border-radius:2px;transition:width 1s cubic-bezier(.22,1,.36,1)}
+
+/* Alerts */
+.alert{display:flex;align-items:flex-start;gap:10px;padding:12px 16px}
+.alert+.alert{border-top:.5px solid var(--sep)}
+.alert-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.alert-t{font-size:14px;font-weight:500}.alert-d{font-size:12px;color:var(--sl);margin-top:1px}
+
+/* Phone mockup */
+.phone-wrap{display:flex;justify-content:center;padding:16px 0}
+.phone{width:360px;background:var(--surface);border-radius:44px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.1),0 0 0 .5px var(--sep)}
+.phone-di{width:100px;height:28px;background:var(--bg);border-radius:0 0 14px 14px;margin:0 auto 8px}
+.phone-scr{background:var(--bg);border-radius:32px;overflow:hidden;min-height:660px;display:flex;flex-direction:column}
+.phone-sb{display:flex;justify-content:space-between;padding:6px 20px;font-size:12px;font-weight:600}
+.phone-lt{padding:8px 20px 4px;font-size:28px;font-weight:700;letter-spacing:-.5px}
+.phone-segw{padding:4px 16px 8px}
+.phone-seg{display:flex;background:var(--segBg);border-radius:8px;padding:2px}
+.phone-seg span{flex:1;text-align:center;padding:5px 0;font-size:11px;font-weight:500;color:var(--sl);border-radius:6px}
+.phone-seg span.on{background:var(--segActive);color:var(--label);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.phone-ct{flex:1;padding:8px 12px;display:flex;flex-direction:column;gap:8px}
+.p-card{background:var(--surface);border-radius:10px;padding:14px;overflow:hidden}
+.p-lbl{font-size:12px;color:var(--sl);margin-bottom:3px}
+.p-val{font-size:28px;font-weight:700;letter-spacing:-.5px}
+.p-chart{display:flex;align-items:flex-end;gap:8px;height:70px;margin-top:10px;padding:0 4px}
+.p-bar{flex:1;border-radius:3px 3px 0 0;min-width:0;transition:height .6s ease}
+.p-chart-labels{display:flex;gap:8px;padding:4px 4px 0;margin-top:2px}
+.p-chart-labels span{flex:1;text-align:center;font-size:9px;color:var(--tl)}
+.p-row{display:flex;align-items:center;padding:10px 14px;position:relative}
+.p-row+.p-row::before{content:'';position:absolute;top:0;left:44px;right:0;height:.5px;background:var(--sep)}
+.p-row-icon{width:28px;height:28px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:13px;margin-right:10px;flex-shrink:0}
+.p-row-t{font-size:13px;font-weight:500;flex:1}.p-row-v{font-size:13px;font-weight:600;color:var(--label)}
+.p-row-s{font-size:10px;color:var(--sl)}
+.p-btn{margin:4px 12px 0;height:44px;background:var(--blue);color:#fff;border:none;border-radius:10px;font-family:inherit;font-size:15px;font-weight:600;width:calc(100% - 24px)}
+.phone-tb{display:flex;justify-content:space-around;padding:8px 0 16px;background:var(--surface);border-top:.5px solid var(--sep)}
+.phone-tab{display:flex;flex-direction:column;align-items:center;gap:1px;font-size:9px;color:var(--tl)}
+.phone-tab.on{color:var(--blue)}
+.phone-tab-i{font-size:18px;line-height:1}
+
+/* Tokens table */
+.tok-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tok-tbl th{text-align:left;padding:8px 10px;font-size:10px;font-weight:700;color:var(--tl);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--sep);background:var(--bg)}
+.tok-tbl td{padding:8px 10px;border-bottom:.5px solid var(--sep);vertical-align:middle}
+.tok-tbl tr:last-child td{border-bottom:none}
+.tok-n{font-weight:600;font-family:'SF Mono',monospace;font-size:11px;color:var(--blue)}
+.tok-p{width:16px;height:16px;border-radius:3px;display:inline-block;vertical-align:middle}
+
+.footer{text-align:center;padding:40px 0 16px;font-size:11px;color:var(--tl);border-top:.5px solid var(--sep);margin-top:48px}
+
+@media(max-width:500px){
+  .hero h1{font-size:28px}
+  .phone{width:100%;max-width:360px}
+  .swatches,.cat-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="hero">
+  <div class="hero-badge"><span></span>Design System v2.0</div>
+  <h1>CashLab</h1>
+  <p>Apple-native design for a personal finance app</p>
+</div>
+
+<nav class="nav">
+  <div class="seg" id="nav">
+    <button class="on" onclick="show('colors',this)">Cores</button>
+    <button onclick="show('type',this)">Tipo</button>
+    <button onclick="show('space',this)">Grid</button>
+    <button onclick="show('comp',this)">Componentes</button>
+    <button onclick="show('screen',this)">Tela</button>
+    <button onclick="show('tokens',this)">Tokens</button>
+  </div>
+</nav>
+
+<!-- CORES -->
+<div class="sec on" id="s-colors">
+<div class="sh"><h2>Paleta de cores</h2><p>Exclusivamente iOS systemColors. Adaptação automática a Light/Dark mode.</p></div>
+
+<div class="sub">
+<div class="sub-t">Cores do sistema</div>
+<div class="swatches">
+  <div class="sw" style="background:var(--blue)"><span class="sw-n" style="color:#fff">systemBlue</span><span class="sw-h" style="color:rgba(255,255,255,.7)">#007AFF</span></div>
+  <div class="sw" style="background:var(--green)"><span class="sw-n" style="color:#fff">systemGreen</span><span class="sw-h" style="color:rgba(255,255,255,.7)">#34C759</span></div>
+  <div class="sw" style="background:var(--red)"><span class="sw-n" style="color:#fff">systemRed</span><span class="sw-h" style="color:rgba(255,255,255,.7)">#FF3B30</span></div>
+  <div class="sw" style="background:var(--orange)"><span class="sw-n" style="color:#fff">systemOrange</span><span class="sw-h" style="color:rgba(255,255,255,.7)">#FF9500</span></div>
+  <div class="sw" style="background:var(--purple)"><span class="sw-n" style="color:#fff">systemPurple</span><span class="sw-h" style="color:rgba(255,255,255,.7)">#AF52DE</span></div>
+  <div class="sw" style="background:var(--pink)"><span class="sw-n" style="color:#fff">systemPink</span><span class="sw-h" style="color:rgba(255,255,255,.7)">#FF2D55</span></div>
+  <div class="sw" style="background:var(--indigo)"><span class="sw-n" style="color:#fff">systemIndigo</span><span class="sw-h" style="color:rgba(255,255,255,.7)">#5856D6</span></div>
+  <div class="sw" style="background:var(--teal)"><span class="sw-n" style="color:#fff">systemTeal</span><span class="sw-h" style="color:rgba(255,255,255,.7)">#5AC8FA</span></div>
+</div>
+</div>
+
+<div class="sub">
+<div class="sub-t">Superfícies</div>
+<div class="swatches">
+  <div class="sw" style="background:var(--bg);border:.5px solid var(--sep)"><span class="sw-n">Background</span><span class="sw-h">#F2F2F7</span></div>
+  <div class="sw" style="background:var(--surface);border:.5px solid var(--sep)"><span class="sw-n">Surface (card)</span><span class="sw-h">#FFFFFF</span></div>
+  <div class="sw" style="background:var(--segBg);border:.5px solid var(--sep)"><span class="sw-n">Tertiary fill</span><span class="sw-h">12% opacity</span></div>
+</div>
+</div>
+
+<div class="sub">
+<div class="sub-t">Membros (QUEM)</div>
+<div class="mem-grid">
+  <div class="mem" style="background:rgba(52,199,89,.12)"><div class="mem-av" style="background:var(--green)">L</div><div><div class="mem-name" style="color:var(--green)">Lucas</div><div class="mem-role">Titular</div></div></div>
+  <div class="mem" style="background:rgba(255,149,0,.12)"><div class="mem-av" style="background:var(--orange)">J</div><div><div class="mem-name" style="color:var(--orange)">Jura</div><div class="mem-role">Cônjuge</div></div></div>
+  <div class="mem" style="background:rgba(255,45,85,.12)"><div class="mem-av" style="background:var(--pink)">J</div><div><div class="mem-name" style="color:var(--pink)">Joice</div><div class="mem-role">Familiar</div></div></div>
+</div>
+</div>
+
+<div class="sub">
+<div class="sub-t">Categorias</div>
+<div class="cat-grid">
+  <div class="cat-item"><div class="cat-dot" style="background:var(--orange)"></div>Alimentação</div>
+  <div class="cat-item"><div class="cat-dot" style="background:var(--green)"></div>Supermercado</div>
+  <div class="cat-item"><div class="cat-dot" style="background:var(--indigo)"></div>Assinaturas</div>
+  <div class="cat-item"><div class="cat-dot" style="background:var(--gray)"></div>Automotivo</div>
+  <div class="cat-item"><div class="cat-dot" style="background:var(--purple)"></div>Compras Online</div>
+  <div class="cat-item"><div class="cat-dot" style="background:var(--blue)"></div>Educação</div>
+  <div class="cat-item"><div class="cat-dot" style="background:var(--teal)"></div>Transporte</div>
+  <div class="cat-item"><div class="cat-dot" style="background:var(--pink)"></div>Farmácia</div>
+  <div class="cat-item"><div class="cat-dot" style="background:var(--green)"></div>Moradia</div>
+  <div class="cat-item"><div class="cat-dot" style="background:var(--yellow)"></div>Pets</div>
+  <div class="cat-item"><div class="cat-dot" style="background:var(--purple)"></div>Serv. Pessoais</div>
+  <div class="cat-item"><div class="cat-dot" style="background:var(--blue)"></div>Transferências</div>
+</div>
+</div>
+</div>
+
+<!-- TIPOGRAFIA -->
+<div class="sec" id="s-type">
+<div class="sh"><h2>Tipografia</h2><p>SF Pro (sistema). Máximo 2 pesos por tela. Valores financeiros sempre Bold.</p></div>
+<div class="sub">
+<div class="sub-t">Escala</div>
+<div class="card"><div class="card-pad">
+  <div class="type-row"><span style="font-size:34px;font-weight:700">Summary</span><div class="type-meta"><div class="type-tok">largeTitle</div><div class="type-spec">34pt Bold</div></div></div>
+  <div class="type-row"><span style="font-size:34px;font-weight:700;color:var(--red)">–R$ 3.829</span><div class="type-meta"><div class="type-tok">heroValue</div><div class="type-spec">34pt Bold</div></div></div>
+  <div class="type-row"><span style="font-size:22px;font-weight:700">Gastos por categoria</span><div class="type-meta"><div class="type-tok">title2</div><div class="type-spec">22pt Bold</div></div></div>
+  <div class="type-row"><span style="font-size:17px;font-weight:600">Casa Portuguesa</span><div class="type-meta"><div class="type-tok">headline</div><div class="type-spec">17pt Semi</div></div></div>
+  <div class="type-row"><span style="font-size:17px">Texto corrido do app</span><div class="type-meta"><div class="type-tok">body</div><div class="type-spec">17pt Regular</div></div></div>
+  <div class="type-row"><span style="font-size:15px;color:var(--sl)">Label de campo</span><div class="type-meta"><div class="type-tok">subheadline</div><div class="type-spec">15pt Regular</div></div></div>
+  <div class="type-row"><span style="font-size:13px;color:var(--sl)">Caption e timestamp</span><div class="type-meta"><div class="type-tok">footnote</div><div class="type-spec">13pt Regular</div></div></div>
+  <div class="type-row"><span style="font-size:11px;color:var(--tl)">Eixo de gráfico</span><div class="type-meta"><div class="type-tok">caption2</div><div class="type-spec">11pt Regular</div></div></div>
+</div></div>
+</div>
+<div class="sub">
+<div class="sub-t">Valores monetários</div>
+<div class="card"><div class="card-pad">
+  <div style="font-size:12px;color:var(--sl);margin-bottom:3px">Resultado do mês</div>
+  <div style="font-size:34px;font-weight:700;color:var(--red);letter-spacing:-1px">–R$ 3.829,65</div>
+  <div style="display:flex;gap:20px;margin-top:10px">
+    <span><span style="font-size:12px;color:var(--tl)">Receita </span><span style="font-size:15px;font-weight:600;color:var(--green)">R$ 27.200</span></span>
+    <span><span style="font-size:12px;color:var(--tl)">Cartões </span><span style="font-size:15px;font-weight:600;color:var(--red)">R$ 22.933</span></span>
+  </div>
+  <div style="font-size:11px;color:var(--tl);margin-top:12px;line-height:1.6">Positivos em <span style="color:var(--green)">verde</span> · Negativos em <span style="color:var(--red)">vermelho</span> com travessão · Sempre 2 casas decimais</div>
+</div></div>
+</div>
+</div>
+
+<!-- GRID -->
+<div class="sec" id="s-space">
+<div class="sh"><h2>Espaçamento e raios</h2><p>Grid de 8pt. Border-radius 10px para cards (padrão iOS grouped).</p></div>
+<div class="sub">
+<div class="sub-t">Espaçamento</div>
+<div style="max-width:400px">
+  <div class="sp-row"><span class="sp-label">xs</span><div class="sp-bar" style="width:8px;opacity:.25"></div><span class="sp-val">4px</span></div>
+  <div class="sp-row"><span class="sp-label">sm</span><div class="sp-bar" style="width:16px;opacity:.3"></div><span class="sp-val">8px</span></div>
+  <div class="sp-row"><span class="sp-label">md</span><div class="sp-bar" style="width:24px;opacity:.4"></div><span class="sp-val">12px</span></div>
+  <div class="sp-row"><span class="sp-label">base</span><div class="sp-bar" style="width:32px;opacity:.5"></div><span class="sp-val">16px</span></div>
+  <div class="sp-row"><span class="sp-label">lg</span><div class="sp-bar" style="width:40px;opacity:.6"></div><span class="sp-val">20px</span></div>
+  <div class="sp-row"><span class="sp-label">xl</span><div class="sp-bar" style="width:48px;opacity:.7"></div><span class="sp-val">24px</span></div>
+  <div class="sp-row"><span class="sp-label">2xl</span><div class="sp-bar" style="width:64px;opacity:.85"></div><span class="sp-val">32px</span></div>
+</div>
+</div>
+<div class="sub">
+<div class="sub-t">Border radius</div>
+<div class="rad-grid">
+  <div class="rad" style="border-radius:6px"><span class="rad-l">sm</span><span class="rad-v">6px</span></div>
+  <div class="rad" style="border-radius:8px"><span class="rad-l">md</span><span class="rad-v">8px</span></div>
+  <div class="rad" style="border-radius:10px"><span class="rad-l">lg (card)</span><span class="rad-v">10px</span></div>
+  <div class="rad" style="border-radius:12px"><span class="rad-l">xl (botão)</span><span class="rad-v">12px</span></div>
+  <div class="rad" style="border-radius:999px"><span class="rad-l">pill</span><span class="rad-v">999px</span></div>
+</div>
+</div>
+</div>
+
+<!-- COMPONENTES -->
+<div class="sec" id="s-comp">
+<div class="sh"><h2>Componentes</h2><p>Padrão iOS grouped table. Sem sombras, sem bordas, sem gradientes.</p></div>
+
+<div class="sub">
+<div class="sub-t">Botões</div>
+<div style="display:flex;flex-direction:column;gap:12px;align-items:flex-start;max-width:320px">
+  <button class="btn-primary">Importar fatura</button>
+  <button class="btn-secondary">Ver detalhes</button>
+  <button class="btn-destructive">Excluir transação</button>
+</div>
+</div>
+
+<div class="sub">
+<div class="sub-t">Badges de membro</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+  <span class="badge" style="background:rgba(52,199,89,.12);color:var(--green)">LUCAS</span>
+  <span class="badge" style="background:rgba(255,149,0,.12);color:var(--orange)">JURA</span>
+  <span class="badge" style="background:rgba(255,45,85,.12);color:var(--pink)">JOICE</span>
+  <span class="badge" style="background:var(--segBg);color:var(--tl)">–</span>
+</div>
+</div>
+
+<div class="sub">
+<div class="sub-t">Alertas</div>
+<div class="card">
+  <div class="alert"><div class="alert-dot" style="background:var(--red)"></div><div><div class="alert-t">Limite quase esgotado</div><div class="alert-d">BV está 99,88% utilizado</div></div></div>
+  <div class="alert"><div class="alert-dot" style="background:var(--orange)"></div><div><div class="alert-t">Assinatura duplicada</div><div class="alert-d">Apple cobrado nos 2 cartões: R$ 407/mês</div></div></div>
+  <div class="alert"><div class="alert-dot" style="background:var(--green)"></div><div><div class="alert-t">Parcela finalizando</div><div class="alert-d">J Pessoa (4/5): penúltima parcela em maio</div></div></div>
+</div>
+</div>
+
+<div class="sub">
+<div class="sub-t">Lista de transações</div>
+<div class="card">
+  <div class="row"><div class="row-icon" style="background:rgba(255,149,0,.12)">🍽</div><div class="row-body"><div class="row-title">Casa Portuguesa</div><div class="row-sub">Alimentação › Restaurante</div></div><div class="row-right"><div class="row-val">R$ 89,90</div><div class="row-pct"><span class="badge" style="background:rgba(52,199,89,.1);color:var(--green);font-size:10px;padding:1px 6px">LUCAS</span></div></div></div>
+  <div class="row"><div class="row-icon" style="background:rgba(175,82,222,.12)">✂️</div><div class="row-body"><div class="row-title">J Pessoa <span style="font-size:12px;color:var(--tl);font-weight:400">3/8</span></div><div class="row-sub">Serv. Pessoais › Estética</div></div><div class="row-right"><div class="row-val">R$ 325,00</div><div class="row-pct"><span class="badge" style="background:rgba(255,149,0,.1);color:var(--orange);font-size:10px;padding:1px 6px">JURA</span></div></div></div>
+  <div class="row"><div class="row-icon" style="background:rgba(255,149,0,.12)">⛽</div><div class="row-body"><div class="row-title">Petrocar</div><div class="row-sub">Combustível</div></div><div class="row-right"><div class="row-val">R$ 200,00</div><div class="row-pct"><span class="badge" style="background:rgba(52,199,89,.1);color:var(--green);font-size:10px;padding:1px 6px">LUCAS</span></div></div></div>
+  <div class="row"><div class="row-icon" style="background:rgba(52,199,89,.12)">🛒</div><div class="row-body"><div class="row-title">Sam's Club</div><div class="row-sub">Supermercado</div></div><div class="row-right"><div class="row-val">R$ 412,35</div><div class="row-pct"><span class="badge" style="background:rgba(52,199,89,.1);color:var(--green);font-size:10px;padding:1px 6px">LUCAS</span></div></div></div>
+</div>
+</div>
+
+<div class="sub">
+<div class="sub-t">Categorias (estilo Insights)</div>
+<div class="card">
+  <div class="row"><div class="row-icon" style="background:rgba(255,149,0,.12)">🍽</div><div class="row-body"><div class="row-title">Alimentação</div><div class="row-sub">15 despesas</div></div><div class="row-right"><div class="row-val">R$ 6.200</div><div class="row-pct">27%</div></div></div>
+  <div class="row"><div class="row-icon" style="background:rgba(175,82,222,.12)">✂️</div><div class="row-body"><div class="row-title">Serv. Pessoais</div><div class="row-sub">8 despesas</div></div><div class="row-right"><div class="row-val">R$ 4.270</div><div class="row-pct">19%</div></div></div>
+  <div class="row"><div class="row-icon" style="background:rgba(142,142,147,.12)">🚗</div><div class="row-body"><div class="row-title">Automotivo</div><div class="row-sub">5 despesas</div></div><div class="row-right"><div class="row-val">R$ 3.900</div><div class="row-pct">17%</div></div></div>
+  <div class="row"><div class="row-icon" style="background:rgba(88,86,214,.12)">🔄</div><div class="row-body"><div class="row-title">Assinaturas</div><div class="row-sub">12 despesas</div></div><div class="row-right"><div class="row-val">R$ 1.803</div><div class="row-pct">8%</div></div></div>
+</div>
+</div>
+
+<div class="sub">
+<div class="sub-t">Progress bars (orçamento)</div>
+<div class="card"><div class="card-pad" style="display:flex;flex-direction:column;gap:14px">
+  <div><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px"><span style="font-weight:500">Alimentação</span><span style="color:var(--green);font-weight:600">45%</span></div><div class="prog-track"><div class="prog-fill" id="pf1" style="width:0;background:var(--green)"></div></div></div>
+  <div><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px"><span style="font-weight:500">Automotivo</span><span style="color:var(--orange);font-weight:600">87%</span></div><div class="prog-track"><div class="prog-fill" id="pf2" style="width:0;background:var(--orange)"></div></div></div>
+  <div><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px"><span style="font-weight:500">Serv. Pessoais</span><span style="color:var(--red);font-weight:600">112%</span></div><div class="prog-track"><div class="prog-fill" id="pf3" style="width:0;background:var(--red)"></div></div></div>
+</div></div>
+</div>
+</div>
+
+<!-- TELA -->
+<div class="sec" id="s-screen">
+<div class="sh"><h2>Preview do dashboard</h2><p>Reprodução fiel do layout observado nas telas de referência, com dados reais do CashLab.</p></div>
+
+<div class="phone-wrap">
+<div class="phone">
+  <div class="phone-di"></div>
+  <div class="phone-scr">
+    <div class="phone-sb"><span>9:41</span><span style="letter-spacing:2px">●●●</span></div>
+    <div class="phone-lt">Summary</div>
+    <div class="phone-segw"><div class="phone-seg"><span>Sem</span><span class="on">Mês</span><span>6 Meses</span><span>Ano</span></div></div>
+    <div class="phone-ct">
+      <div class="p-card">
+        <div class="p-lbl">Despesa total</div>
+        <div class="p-val">R$ 22.933,73</div>
+        <div class="p-chart" id="pchart">
+          <div class="p-bar" style="height:55%;background:rgba(52,199,89,.35)"></div>
+          <div class="p-bar" style="height:70%;background:rgba(52,199,89,.45)"></div>
+          <div class="p-bar" style="height:45%;background:rgba(52,199,89,.35)"></div>
+          <div class="p-bar" style="height:85%;background:rgba(52,199,89,.55)"></div>
+          <div class="p-bar" style="height:60%;background:rgba(52,199,89,.4)"></div>
+          <div class="p-bar" style="height:100%;background:var(--green)"></div>
+        </div>
+        <div class="p-chart-labels"><span>Out</span><span>Nov</span><span>Dez</span><span>Jan</span><span>Fev</span><span>Mar</span></div>
+      </div>
+      <div class="p-card">
+        <div class="p-lbl">Resultado do mês</div>
+        <div style="font-size:20px;font-weight:700;color:var(--red);margin:2px 0 8px">–R$ 3.829,65</div>
+        <div class="p-row"><div class="p-row-icon" style="background:rgba(52,199,89,.12)">💰</div><span class="p-row-t">Receitas</span><span class="p-row-v" style="color:var(--green)">R$ 27.200</span></div>
+        <div class="p-row"><div class="p-row-icon" style="background:rgba(255,59,48,.12)">🏠</div><span class="p-row-t">Despesas fixas</span><span class="p-row-v">–R$ 8.095</span></div>
+        <div class="p-row"><div class="p-row-icon" style="background:rgba(255,59,48,.12)">💳</div><span class="p-row-t">Cartões</span><span class="p-row-v" style="color:var(--red)">–R$ 22.933</span></div>
+      </div>
+      <div class="p-card">
+        <div class="p-row" style="padding-left:14px"><div class="p-row-icon" style="background:rgba(255,59,48,.12)">⚠</div><span class="p-row-t" style="color:var(--red)">Limite BV 99,88%</span></div>
+      </div>
+      <button class="p-btn">Importar fatura</button>
+    </div>
+    <div class="phone-tb">
+      <div class="phone-tab on"><div class="phone-tab-i">🏠</div>Summary</div>
+      <div class="phone-tab"><div class="phone-tab-i">📊</div>Insights</div>
+      <div class="phone-tab"><div class="phone-tab-i">💳</div>Cartões</div>
+      <div class="phone-tab"><div class="phone-tab-i">🎯</div>Metas</div>
+      <div class="phone-tab"><div class="phone-tab-i">⚙️</div>Settings</div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- TOKENS -->
+<div class="sec" id="s-tokens">
+<div class="sh"><h2>Tokens</h2><p>Valores prontos para implementação em React Native (TypeScript).</p></div>
+<div class="sub">
+<div class="sub-t">Cores — Light mode</div>
+<div class="card" style="overflow-x:auto"><div class="card-pad">
+<table class="tok-tbl">
+<thead><tr><th>Token</th><th>Hex</th><th></th><th>Uso</th></tr></thead>
+<tbody>
+<tr><td><span class="tok-n">systemBlue</span></td><td>#007AFF</td><td><span class="tok-p" style="background:#007AFF"></span></td><td>CTAs, links, tab ativo</td></tr>
+<tr><td><span class="tok-n">systemGreen</span></td><td>#34C759</td><td><span class="tok-p" style="background:#34C759"></span></td><td>Positivo, receita, gráfico</td></tr>
+<tr><td><span class="tok-n">systemRed</span></td><td>#FF3B30</td><td><span class="tok-p" style="background:#FF3B30"></span></td><td>Negativo, despesa, erro</td></tr>
+<tr><td><span class="tok-n">systemOrange</span></td><td>#FF9500</td><td><span class="tok-p" style="background:#FF9500"></span></td><td>Atenção, JURA, combustível</td></tr>
+<tr><td><span class="tok-n">background</span></td><td>#F2F2F7</td><td><span class="tok-p" style="background:#F2F2F7"></span></td><td>Fundo de tela</td></tr>
+<tr><td><span class="tok-n">surface</span></td><td>#FFFFFF</td><td><span class="tok-p" style="background:#FFF;border:.5px solid #ccc"></span></td><td>Cards</td></tr>
+<tr><td><span class="tok-n">label</span></td><td>#000000</td><td><span class="tok-p" style="background:#000"></span></td><td>Texto principal</td></tr>
+<tr><td><span class="tok-n">secondaryLabel</span></td><td>#3C3C43 60%</td><td><span class="tok-p" style="background:rgba(60,60,67,.6)"></span></td><td>Texto secundário</td></tr>
+<tr><td><span class="tok-n">separator</span></td><td>#3C3C43 29%</td><td><span class="tok-p" style="background:rgba(60,60,67,.29)"></span></td><td>Separadores 0.5px</td></tr>
+</tbody>
+</table>
+</div></div>
+</div>
+<div class="sub">
+<div class="sub-t">Tipografia</div>
+<div class="card" style="overflow-x:auto"><div class="card-pad">
+<table class="tok-tbl">
+<thead><tr><th>Token</th><th>Size</th><th>Weight</th><th>Uso</th></tr></thead>
+<tbody>
+<tr><td><span class="tok-n">largeTitle</span></td><td>34px</td><td>700</td><td>Título de tela</td></tr>
+<tr><td><span class="tok-n">heroValue</span></td><td>34px</td><td>700</td><td>Valor principal</td></tr>
+<tr><td><span class="tok-n">title2</span></td><td>22px</td><td>700</td><td>Título de seção</td></tr>
+<tr><td><span class="tok-n">headline</span></td><td>17px</td><td>600</td><td>Item de lista</td></tr>
+<tr><td><span class="tok-n">body</span></td><td>17px</td><td>400</td><td>Texto corrido</td></tr>
+<tr><td><span class="tok-n">subheadline</span></td><td>15px</td><td>400</td><td>Labels</td></tr>
+<tr><td><span class="tok-n">footnote</span></td><td>13px</td><td>400</td><td>Captions</td></tr>
+<tr><td><span class="tok-n">caption2</span></td><td>11px</td><td>400</td><td>Eixos gráfico</td></tr>
+</tbody>
+</table>
+</div></div>
+</div>
+<div class="sub">
+<div class="sub-t">Espaçamento</div>
+<div class="card" style="overflow-x:auto"><div class="card-pad">
+<table class="tok-tbl">
+<thead><tr><th>Token</th><th>Valor</th><th>Uso</th></tr></thead>
+<tbody>
+<tr><td><span class="tok-n">xs</span></td><td>4px</td><td>Ícone ↔ texto inline</td></tr>
+<tr><td><span class="tok-n">sm</span></td><td>8px</td><td>Gap interno, entre cards</td></tr>
+<tr><td><span class="tok-n">md</span></td><td>12px</td><td>Padding de list row</td></tr>
+<tr><td><span class="tok-n">base</span></td><td>16px</td><td>Padding de card</td></tr>
+<tr><td><span class="tok-n">lg</span></td><td>20px</td><td>Margin da tela</td></tr>
+<tr><td><span class="tok-n">xl</span></td><td>24px</td><td>Entre seções</td></tr>
+</tbody>
+</table>
+</div></div>
+</div>
+</div>
+
+<div class="footer">CashLab Design System v2.0 · Baseado em telas Apple-native de referência · iOS systemColors · Abril 2026</div>
+
+</div>
+
+<script>
+function show(id,btn){
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('on'));
+  document.getElementById('s-'+id).classList.add('on');
+  document.querySelectorAll('.seg button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  if(id==='comp')setTimeout(()=>{
+    var a=document.getElementById('pf1'),b=document.getElementById('pf2'),c=document.getElementById('pf3');
+    if(a)a.style.width='45%';if(b)b.style.width='87%';if(c)c.style.width='100%';
+  },100);
+}
+var obs=new IntersectionObserver(e=>e.forEach(x=>{if(x.isIntersecting){x.target.style.opacity='1';x.target.style.transform='translateY(0)'}}),{threshold:.1});
+document.querySelectorAll('.sub').forEach(el=>{el.style.opacity='0';el.style.transform='translateY(8px)';el.style.transition='opacity .4s ease,transform .4s ease';obs.observe(el)});
+</script>
+</body>
+</html>

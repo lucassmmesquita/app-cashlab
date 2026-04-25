@@ -1,0 +1,1 @@
+"""CashLab — Celery Tasks"""
