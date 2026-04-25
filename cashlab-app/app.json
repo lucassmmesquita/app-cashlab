@@ -10,11 +10,12 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.lucasmesquita.cashlab",
-      "buildNumber": "1",
+      "bundleIdentifier": "com.lucasmesquita.cashlab.dev",
+      "buildNumber": "2",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "CashLab precisa acessar sua fototeca para importar prints de transações do cartão.",
-        "CFBundleDisplayName": "CashLab"
+        "CFBundleDisplayName": "CashLab",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -22,7 +23,10 @@
       "adaptiveIcon": {
         "backgroundColor": "#0D7C3F",
         "foregroundImage": "./assets/images/icon.png"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -51,9 +55,10 @@
     },
     "extra": {
       "eas": {
-        "projectId": ""
-      }
+        "projectId": "95463758-c2e6-4133-8387-67413044eaa6"
+      },
+      "router": {}
     },
-    "owner": "lucasmesquita"
+    "owner": "lucassmmesquita"
   }
 }

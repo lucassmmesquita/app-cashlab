@@ -2,7 +2,7 @@
 
 Fluxo:
 1. POST /upload → recebe PDF → detecta banco → parseia → retorna preview
-2. POST /upload/{file_id}/confirm → re-parseia → cria CreditCard/Invoice/Transactions no DB
+2. POST /upload/{file_id}/confirm → usa dados em memória → cria CreditCard/Invoice/Transactions no DB
 """
 import hashlib
 import uuid
@@ -26,6 +26,9 @@ router = APIRouter(prefix="/invoices", tags=["Faturas"])
 
 UPLOAD_DIR = Path(settings.UPLOAD_DIR)
 MAX_SIZE = settings.MAX_PDF_SIZE_MB * 1024 * 1024  # bytes
+
+# In-memory store for pending PDF imports (avoids re-parsing from disk)
+_pending_pdf_imports: dict = {}
 
 
 # ── Helpers ────────────────────────────────────────────────────────
@@ -128,7 +131,7 @@ async def upload_invoice(
             detail=f"Arquivo excede o limite de {settings.MAX_PDF_SIZE_MB}MB",
         )
 
-    # 3. Salvar em disco
+    # 3. Salvar em disco (temporary)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     file_id = str(uuid.uuid4())
     file_path = UPLOAD_DIR / f"{file_id}.pdf"
@@ -161,10 +164,13 @@ async def upload_invoice(
             f"transações={len(result.transactions)}"
         )
 
-        # 6. Serializar preview
-        transactions_preview = []
+        # 6. Compute hash
+        pdf_hash = hashlib.md5(content).hexdigest()
+
+        # 7. Serialize transactions for storage
+        transactions_data = []
         for tx in result.transactions:
-            transactions_preview.append({
+            transactions_data.append({
                 "date": tx.date.isoformat() if tx.date else None,
                 "description": tx.description,
                 "raw_description": tx.raw_description,
@@ -173,7 +179,20 @@ async def upload_invoice(
                 "installment_total": tx.installment_total,
                 "is_international": tx.is_international,
                 "card_last_digits": tx.card_last_digits,
+                "iof_amount": str(tx.iof_amount) if tx.iof_amount else None,
             })
+
+        # 8. Store parsed result in memory for confirm step
+        _pending_pdf_imports[file_id] = {
+            "bank": detected_bank,
+            "reference_month": result.reference_month,
+            "due_date": result.due_date.isoformat() if result.due_date else None,
+            "total_amount": str(result.total_amount),
+            "card_last_digits": result.card_last_digits,
+            "pdf_hash": pdf_hash,
+            "transactions": transactions_data,
+            "created_at": datetime.utcnow().isoformat(),
+        }
 
         return {
             "data": {
@@ -183,8 +202,8 @@ async def upload_invoice(
                 "due_date": result.due_date.isoformat() if result.due_date else None,
                 "total_amount": str(result.total_amount),
                 "card_last_digits": result.card_last_digits,
-                "transaction_count": len(result.transactions),
-                "transactions": transactions_preview,
+                "transaction_count": len(transactions_data),
+                "transactions": transactions_data,
             }
         }
 
@@ -203,48 +222,52 @@ async def upload_invoice(
 @router.post("/upload/{file_id}/confirm")
 async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
     """
-    Confirmar importação: re-parseia o PDF e persiste tudo no DB.
+    Confirmar importação: usa dados em memória e persiste no DB.
 
     Cria: CreditCard (se não existe) → Invoice → Transaction[].
     Detecta membro pelo cartão. Verifica duplicidade.
     """
-    # 1. Buscar PDF salvo
-    file_path = UPLOAD_DIR / f"{file_id}.pdf"
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="PDF não encontrado. Faça upload novamente.")
+    # 1. Buscar dados do parse em memória
+    pending = _pending_pdf_imports.get(file_id)
+    if not pending:
+        raise HTTPException(
+            status_code=404,
+            detail="Importação não encontrada. O servidor pode ter reiniciado. Faça upload novamente."
+        )
 
     try:
-        # 2. Re-parsear
-        content = file_path.read_bytes()
-        pdf_hash = hashlib.md5(content).hexdigest()
+        detected_bank = pending["bank"]
+        reference_month = pending["reference_month"]
+        due_date_str = pending.get("due_date")
+        total_amount = Decimal(pending["total_amount"])
+        card_last_digits = pending["card_last_digits"]
+        pdf_hash = pending["pdf_hash"]
+        transactions_data = pending["transactions"]
 
-        detected_bank = detect_bank(str(file_path))
-        if detected_bank == "unknown":
-            raise HTTPException(status_code=422, detail="Banco não reconhecido no PDF.")
-
-        parser = get_parser(detected_bank)
-        result = parser.parse(str(file_path))
+        # 2. Parse due_date
+        from datetime import date
+        due_date = date.fromisoformat(due_date_str) if due_date_str else None
 
         # 3. Detectar membro e criar/buscar cartão
-        member = await detect_member_for_card(db, result.card_last_digits)
-        card = await get_or_create_card(db, detected_bank, result.card_last_digits, member.id)
+        member = await detect_member_for_card(db, card_last_digits)
+        card = await get_or_create_card(db, detected_bank, card_last_digits, member.id)
 
         # 4. Verificar duplicidade
-        is_duplicate = await check_duplicate_invoice(db, pdf_hash, card.id, result.reference_month)
+        is_duplicate = await check_duplicate_invoice(db, pdf_hash, card.id, reference_month)
         if is_duplicate:
             raise HTTPException(
                 status_code=409,
-                detail=f"Fatura de {result.reference_month} para cartão final {result.card_last_digits} "
+                detail=f"Fatura de {reference_month} para cartão final {card_last_digits} "
                        f"já foi importada anteriormente.",
             )
 
         # 5. Criar Invoice
         invoice = Invoice(
             card_id=card.id,
-            reference_month=result.reference_month,
-            due_date=result.due_date,
-            total_amount=result.total_amount,
-            pdf_file_path=str(file_path),
+            reference_month=reference_month,
+            due_date=due_date,
+            total_amount=total_amount,
+            pdf_file_path=f"uploads/{file_id}.pdf",
             pdf_hash=pdf_hash,
             status="confirmed",
             parsed_at=datetime.utcnow(),
@@ -258,32 +281,44 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
 
         # 7. Criar Transactions
         tx_count = 0
-        for tx in result.transactions:
+        for tx in transactions_data:
             # Detectar membro por cartão individual da transação
-            tx_card_digits = tx.card_last_digits or result.card_last_digits
+            tx_card_digits = tx.get("card_last_digits") or card_last_digits
             tx_member = await detect_member_for_card(db, tx_card_digits)
             tx_card = await get_or_create_card(db, detected_bank, tx_card_digits, tx_member.id)
 
             # Categorização automática por descrição
-            category_id, subcategory = cat_engine.categorize(tx.description)
+            category_id, subcategory = cat_engine.categorize(tx["description"])
             if category_id and subcategory != cat_engine._fallback_category_id:
                 categorized_count += 1
+
+            # Parse date
+            try:
+                tx_date = date.fromisoformat(tx["date"]) if tx.get("date") else date.today()
+            except (ValueError, KeyError):
+                tx_date = date.today()
+
+            # Parse amount
+            amount = Decimal(tx["amount"])
+
+            # Parse IOF
+            iof_amount = Decimal(tx["iof_amount"]) if tx.get("iof_amount") else None
 
             transaction = Transaction(
                 invoice_id=invoice.id,
                 card_id=tx_card.id,
                 member_id=tx_member.id,
                 category_id=category_id,
-                transaction_date=tx.date,
-                description=tx.description,
-                raw_description=tx.raw_description,
-                amount=tx.amount,
-                installment_num=tx.installment_num,
-                installment_total=tx.installment_total,
+                transaction_date=tx_date,
+                description=tx["description"],
+                raw_description=tx.get("raw_description", tx["description"]),
+                amount=amount,
+                installment_num=tx.get("installment_num"),
+                installment_total=tx.get("installment_total"),
                 subcategory=subcategory,
                 who=tx_member.name,
-                is_international=tx.is_international,
-                iof_amount=tx.iof_amount,
+                is_international=tx.get("is_international", False),
+                iof_amount=iof_amount,
             )
             db.add(transaction)
             tx_count += 1
@@ -291,10 +326,13 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
         # 8. Commit
         await db.commit()
 
+        # 9. Cleanup
+        del _pending_pdf_imports[file_id]
+
         logger.info(
             f"✅ Importação confirmada: invoice_id={invoice.id}, "
             f"cartão={card.bank} {card.last_digits}, "
-            f"mês={result.reference_month}, "
+            f"mês={reference_month}, "
             f"{tx_count} transações salvas, "
             f"{categorized_count} categorizadas automaticamente"
         )
@@ -305,8 +343,8 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
                 "file_id": file_id,
                 "invoice_id": invoice.id,
                 "card": f"{card.bank} final {card.last_digits}",
-                "reference_month": result.reference_month,
-                "total_amount": str(result.total_amount),
+                "reference_month": reference_month,
+                "total_amount": str(total_amount),
                 "transaction_count": tx_count,
                 "categorized_count": categorized_count,
                 "member": member.name,

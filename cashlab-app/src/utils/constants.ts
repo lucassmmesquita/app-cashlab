@@ -2,10 +2,8 @@
  * CashLab — Constantes do app
  */
 
-/** API host — para health check / wake-up */
-export const API_HOST = __DEV__
-  ? 'http://localhost:8000'
-  : 'https://app-cashlab.onrender.com';
+/** API host — usando Render para dev + prod (iPhone não acessa localhost) */
+export const API_HOST = 'https://app-cashlab.onrender.com';
 
 /** API base URL — ajustar para produção */
 export const API_BASE_URL = `${API_HOST}/api/v1`;

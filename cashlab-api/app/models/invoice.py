@@ -21,7 +21,7 @@ class Invoice(Base, TimestampMixin, SoftDeleteMixin):
     due_date: Mapped[Optional[date]] = mapped_column(Date, default=None)
     total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     pdf_file_path: Mapped[Optional[str]] = mapped_column(String(500), default=None)
-    pdf_hash: Mapped[Optional[str]] = mapped_column(String(32), default=None, index=True)  # MD5
+    pdf_hash: Mapped[Optional[str]] = mapped_column(String(64), default=None, index=True)  # MD5 or UUID
     status: Mapped[str] = mapped_column(String(20), default="imported")  # imported, confirmed, rejected
     parsed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
 
