@@ -26,6 +26,36 @@ export interface UploadPreview {
   transactions: ParsedTransaction[];
 }
 
+export interface InvoiceListItem {
+  id: number;
+  reference_month: string;
+  due_date: string | null;
+  total_amount: string;
+  status: string;
+  card_id: number;
+  bank_name: string | null;
+  card_last_digits: string | null;
+  transaction_count: number;
+  file_size: number | null;
+  created_at: string | null;
+}
+
+export interface InvoiceDetail extends InvoiceListItem {
+  transactions: {
+    id: number;
+    date: string;
+    description: string;
+    amount: string;
+    who: string;
+    category_id: number | null;
+    category: string | null;
+    subcategory: string | null;
+    installment_num: number | null;
+    installment_total: number | null;
+    is_international: boolean;
+  }[];
+}
+
 export const invoiceService = {
   /**
    * Upload PDF e receber preview das transações extraídas.
@@ -34,12 +64,10 @@ export const invoiceService = {
     const formData = new FormData();
 
     if (Platform.OS === 'web') {
-      // Web: fetch the blob from the URI
       const response = await fetch(fileUri);
       const blob = await response.blob();
       formData.append('file', blob, fileName);
     } else {
-      // Native: use the URI directly
       formData.append('file', {
         uri: fileUri,
         name: fileName,
@@ -63,10 +91,25 @@ export const invoiceService = {
   },
 
   /**
-   * Listar faturas importadas.
+   * Listar faturas importadas com dados enriquecidos.
    */
-  async list() {
-    const response = await api.get('/invoices');
-    return response.data.data;
+  async list(): Promise<InvoiceListItem[]> {
+    const res = await api.get('/invoices');
+    return res.data?.data || [];
+  },
+
+  /**
+   * Detalhe da fatura com todas as transações.
+   */
+  async getDetail(id: number): Promise<InvoiceDetail> {
+    const res = await api.get(`/invoices/${id}`);
+    return res.data?.data;
+  },
+
+  /**
+   * Excluir fatura (soft delete).
+   */
+  async remove(id: number): Promise<void> {
+    await api.delete(`/invoices/${id}`);
   },
 };

@@ -190,6 +190,7 @@ async def upload_invoice(
             "total_amount": str(result.total_amount),
             "card_last_digits": result.card_last_digits,
             "pdf_hash": pdf_hash,
+            "file_size": len(content),
             "transactions": transactions_data,
             "created_at": datetime.utcnow().isoformat(),
         }
@@ -269,6 +270,7 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
             total_amount=total_amount,
             pdf_file_path=f"uploads/{file_id}.pdf",
             pdf_hash=pdf_hash,
+            file_size=pending.get("file_size"),
             status="confirmed",
             parsed_at=datetime.utcnow(),
         )
@@ -364,16 +366,29 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("")
 async def list_invoices(db: AsyncSession = Depends(get_db)):
-    """Listar faturas importadas"""
+    """Listar faturas importadas com informações enriquecidas"""
+    from sqlalchemy import func
+
     result = await db.execute(
-        select(Invoice)
+        select(
+            Invoice,
+            CreditCard.bank.label("bank_name"),
+            CreditCard.last_digits.label("card_last_digits"),
+            func.count(Transaction.id).label("transaction_count"),
+        )
+        .outerjoin(CreditCard, Invoice.card_id == CreditCard.id)
+        .outerjoin(
+            Transaction,
+            (Transaction.invoice_id == Invoice.id) & (Transaction.deleted_at == None),
+        )
         .where(Invoice.deleted_at == None)
+        .group_by(Invoice.id, CreditCard.bank, CreditCard.last_digits)
         .order_by(Invoice.created_at.desc())
     )
-    invoices = result.scalars().all()
+    rows = result.all()
 
     data = []
-    for inv in invoices:
+    for inv, bank_name, card_last_digits, tx_count in rows:
         data.append({
             "id": inv.id,
             "reference_month": inv.reference_month,
@@ -381,6 +396,10 @@ async def list_invoices(db: AsyncSession = Depends(get_db)):
             "total_amount": str(inv.total_amount),
             "status": inv.status,
             "card_id": inv.card_id,
+            "bank_name": bank_name,
+            "card_last_digits": card_last_digits,
+            "transaction_count": tx_count,
+            "file_size": inv.file_size,
             "created_at": inv.created_at.isoformat() if inv.created_at else None,
         })
 
@@ -391,11 +410,15 @@ async def list_invoices(db: AsyncSession = Depends(get_db)):
 async def get_invoice(invoice_id: int, db: AsyncSession = Depends(get_db)):
     """Detalhe da fatura com transações"""
     result = await db.execute(
-        select(Invoice).where(Invoice.id == invoice_id, Invoice.deleted_at == None)
+        select(Invoice, CreditCard.bank.label("bank_name"), CreditCard.last_digits.label("card_last_digits"))
+        .outerjoin(CreditCard, Invoice.card_id == CreditCard.id)
+        .where(Invoice.id == invoice_id, Invoice.deleted_at == None)
     )
-    inv = result.scalar_one_or_none()
-    if not inv:
+    row = result.one_or_none()
+    if not row:
         raise HTTPException(status_code=404, detail="Fatura não encontrada")
+
+    inv, bank_name, card_last_digits = row
 
     # Buscar transações
     from app.models import Category
@@ -414,6 +437,10 @@ async def get_invoice(invoice_id: int, db: AsyncSession = Depends(get_db)):
             "due_date": inv.due_date.isoformat() if inv.due_date else None,
             "total_amount": str(inv.total_amount),
             "status": inv.status,
+            "bank_name": bank_name,
+            "card_last_digits": card_last_digits,
+            "file_size": inv.file_size,
+            "created_at": inv.created_at.isoformat() if inv.created_at else None,
             "transaction_count": len(rows),
             "transactions": [
                 {
@@ -437,7 +464,7 @@ async def get_invoice(invoice_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.delete("/{invoice_id}")
 async def delete_invoice(invoice_id: int, db: AsyncSession = Depends(get_db)):
-    """Excluir fatura (soft delete)"""
+    """Excluir fatura e suas transações (soft delete)"""
     result = await db.execute(
         select(Invoice).where(Invoice.id == invoice_id, Invoice.deleted_at == None)
     )
@@ -445,8 +472,20 @@ async def delete_invoice(invoice_id: int, db: AsyncSession = Depends(get_db)):
     if not inv:
         raise HTTPException(status_code=404, detail="Fatura não encontrada")
 
-    inv.is_deleted = True
+    # Soft delete invoice
     inv.deleted_at = datetime.utcnow()
+
+    # Soft delete associated transactions
+    tx_result = await db.execute(
+        select(Transaction).where(
+            Transaction.invoice_id == invoice_id,
+            Transaction.deleted_at == None,
+        )
+    )
+    for tx in tx_result.scalars().all():
+        tx.deleted_at = datetime.utcnow()
+
     await db.commit()
 
     return {"status": "deleted", "invoice_id": invoice_id}
+

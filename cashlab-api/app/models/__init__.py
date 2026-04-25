@@ -4,6 +4,7 @@ from .family import FamilyGroup
 from .member import Member
 from .card import CreditCard
 from .invoice import Invoice
+from .bank import Bank
 from .transaction import Transaction
 from .category import Category
 from .budget import Budget
@@ -20,6 +21,7 @@ __all__ = [
     # Cartões e Faturas
     "CreditCard",
     "Invoice",
+    "Bank",
     # Transações
     "Transaction",
     # Categorias

@@ -11,6 +11,7 @@ from .fixed_expenses import router as fixed_expenses_router
 from .categories import router as categories_router
 from .export import router as export_router
 from .transactions_import import router as transactions_import_router
+from .banks import router as banks_router
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -26,3 +27,4 @@ api_router.include_router(fixed_expenses_router)
 api_router.include_router(categories_router)
 api_router.include_router(export_router)
 api_router.include_router(transactions_import_router)
+api_router.include_router(banks_router)
