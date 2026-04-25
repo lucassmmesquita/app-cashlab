@@ -396,7 +396,7 @@ export default function ImportScreen() {
       </Modal>
 
       {/* ── ADD BANK MODAL ── */}
-      <Modal visible={bankModal} animationType="slide" presentationStyle="formSheet" transparent>
+      <Modal visible={bankModal} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.formModal, { backgroundColor: colors.surface, borderRadius: radius.xl }]}>
             <Text style={[styles.modalTitle, { color: colors.label, marginBottom: 16 }]}>Novo Banco</Text>
