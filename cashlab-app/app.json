@@ -1,23 +1,28 @@
 {
   "expo": {
-    "name": "cashlab-app",
+    "name": "CashLab",
     "slug": "cashlab-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "cashlabapp",
     "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
     "ios": {
-      "icon": "./assets/expo.icon"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.lucasmesquita.cashlab",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "CashLab precisa acessar sua fototeca para importar prints de transações do cartão.",
+        "CFBundleDisplayName": "CashLab"
+      }
     },
     "android": {
+      "package": "com.lucasmesquita.cashlab",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
+        "backgroundColor": "#0D7C3F",
+        "foregroundImage": "./assets/images/icon.png"
+      }
     },
     "web": {
       "output": "static",
@@ -28,18 +33,27 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "android": {
-            "image": "./assets/images/splash-icon.png",
-            "imageWidth": 76
-          }
+          "backgroundColor": "#0D7C3F",
+          "image": "./assets/images/icon.png",
+          "imageWidth": 200
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CashLab precisa acessar sua fototeca para importar prints de transações."
+        }
+      ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
-    }
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    },
+    "owner": "lucasmesquita"
   }
 }
