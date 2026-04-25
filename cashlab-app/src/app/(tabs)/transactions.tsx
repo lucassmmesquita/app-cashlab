@@ -8,7 +8,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput,
-  Modal, TouchableOpacity, ActivityIndicator, Alert, Platform,
+  Modal, TouchableOpacity, ActivityIndicator, Alert, Platform, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -52,6 +52,7 @@ export default function TransactionsScreen() {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [bankFilter, setBankFilter] = useState<FilterType>('all');
   const [memberFilter, setMemberFilter] = useState<MemberFilter>('all');
   const [search, setSearch] = useState('');
@@ -169,6 +170,13 @@ export default function TransactionsScreen() {
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => { setRefreshing(true); await fetchTransactions(); setRefreshing(false); }}
+              tintColor={colors.blue}
+            />
+          }
         >
           {/* Header with + button */}
           <View style={styles.headerRow}>

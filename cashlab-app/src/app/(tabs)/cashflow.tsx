@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Modal, TextInput, Alert, ActivityIndicator,
+  Modal, TextInput, Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -44,6 +44,7 @@ export default function CashFlowScreen() {
   const [expenses, setExpenses] = useState<ExpenseItem[]>(FALLBACK_EXPENSES);
   const [invoices, setInvoices] = useState<CardInvoice[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -180,7 +181,15 @@ export default function CashFlowScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ScrollView contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]} showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => { setRefreshing(true); await fetchData(); setRefreshing(false); }}
+              tintColor={colors.blue}
+            />
+          }
+        >
           <Text style={[styles.largeTitle, { color: colors.label }]}>Fluxo de Caixa</Text>
           <MonthNavigator month={selectedMonth} onPrevious={goToPreviousMonth} onNext={goToNextMonth} />
 

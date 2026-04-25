@@ -4,8 +4,8 @@
  * Seções: Aparência (tema), Segurança (Face ID), Conta (logout).
  * iOS grouped table style.
  */
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, Switch, Alert, Platform } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, Pressable, Switch, Alert, Platform, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollView } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -29,6 +29,13 @@ export default function SettingsScreen() {
   const setBiometricEnabled = useSettingsStore((s) => s.setBiometricEnabled);
 
   const { isAvailable: biometricAvailable, biometricLabel } = useBiometric();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await new Promise(r => setTimeout(r, 500));
+    setRefreshing(false);
+  }, []);
 
   const handleLogout = () => {
     Alert.alert('Sair', 'Deseja sair da conta?', [
@@ -56,6 +63,9 @@ export default function SettingsScreen() {
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.blue} />
+          }
         >
           <Text style={[styles.largeTitle, { color: colors.label }]}>Settings</Text>
 

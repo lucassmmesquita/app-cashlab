@@ -3,7 +3,7 @@
  *
  * Fluxo: Selecionar PDF → Upload → Preview transações → Confirmar
  */
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
@@ -33,6 +34,14 @@ export default function ImportScreen() {
   const [preview, setPreview] = useState<UploadPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>('');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    handleReset();
+    await new Promise(r => setTimeout(r, 500));
+    setRefreshing(false);
+  }, []);
 
   const handlePickFile = async () => {
     try {
@@ -89,6 +98,9 @@ export default function ImportScreen() {
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.blue} />
+          }
         >
           <Text style={[styles.largeTitle, { color: colors.label }]}>Cartões</Text>
 

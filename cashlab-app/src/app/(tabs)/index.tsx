@@ -4,8 +4,8 @@
  * Visão consolidada do mês. iOS grouped cards. Sem gradientes.
  * Dados mock baseados na spec real (BV + Itaú Abril/2026).
  */
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -63,6 +63,14 @@ const MOCK_BALANCE = '5566.27';
 export default function DashboardScreen() {
   const { selectedMonth, goToPreviousMonth, goToNextMonth } = useMonthNavigation();
   const { colors, isDark, radius, spacing } = useAppTheme();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // TODO: fetch real data from API
+    await new Promise(r => setTimeout(r, 800));
+    setRefreshing(false);
+  }, []);
 
   // Build donut segments
   const categorySegments: DonutSegment[] = MOCK_CATEGORIES.map((cat) => ({
@@ -79,6 +87,9 @@ export default function DashboardScreen() {
           style={styles.scroll}
           contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.blue} />
+          }
         >
           {/* Header */}
           <View style={styles.headerRow}>
