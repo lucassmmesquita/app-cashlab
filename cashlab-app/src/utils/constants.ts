@@ -2,10 +2,13 @@
  * CashLab — Constantes do app
  */
 
+/** API host — para health check / wake-up */
+export const API_HOST = __DEV__
+  ? 'http://localhost:8000'
+  : 'https://app-cashlab.onrender.com';
+
 /** API base URL — ajustar para produção */
-export const API_BASE_URL = __DEV__
-  ? 'http://localhost:8000/api/v1'
-  : 'https://api.cashlab.app/api/v1';
+export const API_BASE_URL = `${API_HOST}/api/v1`;
 
 /** Categorias do sistema (18 categorias) */
 export const SYSTEM_CATEGORIES = [

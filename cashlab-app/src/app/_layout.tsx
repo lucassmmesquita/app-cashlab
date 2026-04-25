@@ -5,11 +5,15 @@ import React, { useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { useWakeUpBackend } from '@/hooks/useWakeUpBackend';
 
 export default function RootLayout() {
   const hydrateAuth = useAuthStore((s) => s.hydrate);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
   const { isDark } = useAppTheme();
+
+  // Wake up Render backend on app launch
+  useWakeUpBackend();
 
   useEffect(() => {
     hydrateAuth();
