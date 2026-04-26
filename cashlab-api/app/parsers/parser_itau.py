@@ -279,6 +279,12 @@ class ParserItau(BaseParser):
 
         for line in lines:
             line = line.strip()
+
+            # STOP parsing when hitting future installments section (check BEFORE skip)
+            if re.search(r"(Comprasparceladas|parcelas.*pr[oó]ximas|Totalparapr[oó]ximas|Simula[cç][aã]o)", line, re.IGNORECASE):
+                logger.info(f"Itaú: parando parse na seção de parcelas futuras")
+                break
+
             if self._should_skip_line(line):
                 continue
 
