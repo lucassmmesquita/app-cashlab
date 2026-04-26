@@ -323,6 +323,7 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
                 who=None,
                 is_international=tx.get("is_international", False),
                 iof_amount=iof_amount,
+                billing_month=reference_month,
             )
             db.add(transaction)
             tx_count += 1

@@ -37,15 +37,21 @@ async def list_transactions(
 
     # Filters
     if month:
-        # month = "2026-04" → filter transaction_date between 2026-04-01 and 2026-04-30
+        # Filter by billing_month (set during invoice import) OR transaction_date for manual entries
         from datetime import date as dt_date
+        from sqlalchemy import or_
         year, m = month.split("-")
         start = dt_date(int(year), int(m), 1)
         if int(m) == 12:
             end = dt_date(int(year) + 1, 1, 1)
         else:
             end = dt_date(int(year), int(m) + 1, 1)
-        query = query.where(Transaction.transaction_date >= start, Transaction.transaction_date < end)
+        query = query.where(
+            or_(
+                Transaction.billing_month == month,
+                (Transaction.billing_month == None) & (Transaction.transaction_date >= start) & (Transaction.transaction_date < end),
+            )
+        )
 
     if bank:
         query = query.where(CreditCard.bank == bank.lower())
@@ -83,6 +89,7 @@ async def list_transactions(
             "card": card_digits or "",
             "installment": f"{tx.installment_num}/{tx.installment_total}" if tx.installment_num and tx.installment_total else None,
             "location": tx.location,
+            "billing_month": tx.billing_month,
         })
 
     return {"data": data, "meta": {"page": page, "per_page": per_page, "total": total}}

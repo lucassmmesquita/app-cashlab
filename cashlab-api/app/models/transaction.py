@@ -5,7 +5,7 @@ from typing import Optional
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import String, Integer, Numeric, Boolean, Date, Text, ForeignKey, CheckConstraint
+from sqlalchemy import String, Integer, Numeric, Boolean, Date, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -14,12 +14,6 @@ from .base import TimestampMixin, SoftDeleteMixin
 
 class Transaction(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "transactions"
-    __table_args__ = (
-        CheckConstraint(
-            "who IN ('LUCAS', 'JURA', 'JOICE', '-', 'PENDENTE')",
-            name="chk_transaction_who",
-        ),
-    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"), nullable=False, index=True)
@@ -43,7 +37,7 @@ class Transaction(Base, TimestampMixin, SoftDeleteMixin):
 
     # Categorização
     subcategory: Mapped[Optional[str]] = mapped_column(String(100), default=None)
-    who: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDENTE")
+    who: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default=None)
 
     # Internacional
     is_international: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -52,6 +46,7 @@ class Transaction(Base, TimestampMixin, SoftDeleteMixin):
     # Metadados
     location: Mapped[Optional[str]] = mapped_column(String(255), default=None)
     notes: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    billing_month: Mapped[Optional[str]] = mapped_column(String(7), default=None, index=True)  # "2026-04"
 
     # Relationships
     invoice = relationship("Invoice", back_populates="transactions")
