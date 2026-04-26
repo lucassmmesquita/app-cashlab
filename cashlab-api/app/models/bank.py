@@ -12,8 +12,11 @@ class Bank(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "banks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(50), nullable=False)            # "Banco BV"
-    slug: Mapped[str] = mapped_column(String(30), nullable=False, unique=True, index=True)  # "bv"
-    color: Mapped[str] = mapped_column(String(7), nullable=False, default="#007AFF")  # hex
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")  # ready, pending
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    slug: Mapped[str] = mapped_column(String(30), nullable=False, unique=True, index=True)
+    color: Mapped[str] = mapped_column(String(7), nullable=False, default="#007AFF")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     has_native_parser: Mapped[bool] = mapped_column(Boolean, default=False)
+    closing_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # dia fechamento
+    due_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)      # dia vencimento
+

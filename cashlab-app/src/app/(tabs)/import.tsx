@@ -31,6 +31,14 @@ export default function ImportScreen() {
   const [preview, setPreview] = useState<UploadPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState('');
+  const [fileUri, setFileUri] = useState('');
+
+  // Bank/month selector (shown after picking PDF)
+  const [selectModal, setSelectModal] = useState(false);
+  const [selectedBank, setSelectedBank] = useState('auto');
+  const now = new Date();
+  const [selectedYear, setSelectedYear] = useState(String(now.getFullYear()));
+  const [selectedMonth, setSelectedMonth] = useState(String(now.getMonth() + 1).padStart(2, '0'));
 
   // Data lists
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
@@ -47,6 +55,8 @@ export default function ImportScreen() {
   const [bankModal, setBankModal] = useState(false);
   const [newBankName, setNewBankName] = useState('');
   const [newBankColor, setNewBankColor] = useState('#007AFF');
+  const [newClosingDay, setNewClosingDay] = useState('');
+  const [newDueDay, setNewDueDay] = useState('');
   const [bankSaving, setBankSaving] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -67,6 +77,9 @@ export default function ImportScreen() {
     setRefreshing(false);
   }, [fetchData]);
 
+  const MONTHS = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
   // ── Import Flow ──
   const handlePickFile = async () => {
     try {
@@ -74,9 +87,21 @@ export default function ImportScreen() {
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
       setFileName(asset.name);
-      setStep('uploading');
+      setFileUri(asset.uri);
       setError(null);
-      const data = await invoiceService.upload(asset.uri, asset.name);
+      // Show bank/month selector
+      setSelectModal(true);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao selecionar PDF');
+    }
+  };
+
+  const handleUploadWithParams = async () => {
+    setSelectModal(false);
+    setStep('uploading');
+    try {
+      const refMonth = `${selectedYear}-${selectedMonth}`;
+      const data = await invoiceService.upload(fileUri, fileName, selectedBank, refMonth);
       setPreview(data);
       setStep('preview');
     } catch (err: any) {
@@ -98,7 +123,7 @@ export default function ImportScreen() {
     }
   };
 
-  const handleReset = () => { setStep('idle'); setPreview(null); setError(null); setFileName(''); };
+  const handleReset = () => { setStep('idle'); setPreview(null); setError(null); setFileName(''); setFileUri(''); };
 
   // ── Invoice Detail ──
   const openDetail = async (id: number) => {
@@ -125,9 +150,13 @@ export default function ImportScreen() {
     if (!newBankName.trim()) return;
     setBankSaving(true);
     try {
-      await bankService.create(newBankName.trim(), newBankColor);
+      const cd = newClosingDay ? parseInt(newClosingDay) : undefined;
+      const dd = newDueDay ? parseInt(newDueDay) : undefined;
+      await bankService.create(newBankName.trim(), newBankColor, cd, dd);
       setBankModal(false);
       setNewBankName('');
+      setNewClosingDay('');
+      setNewDueDay('');
       fetchData();
     } catch (err: any) {
       Alert.alert('Erro', err.response?.data?.detail || 'Erro ao criar banco');
@@ -299,7 +328,14 @@ export default function ImportScreen() {
                     {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator, marginLeft: 52 }]} />}
                     <View style={styles.bankRow}>
                       <View style={[styles.bankDot, { backgroundColor: b.color }]} />
-                      <Text style={[styles.bankName, { color: colors.label }]}>{b.name}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.bankName, { color: colors.label }]}>{b.name}</Text>
+                        {(b.closing_day || b.due_day) && (
+                          <Text style={[styles.invSub, { color: colors.tertiaryLabel }]}>
+                            {b.closing_day ? `Fech. dia ${b.closing_day}` : ''}{b.closing_day && b.due_day ? ' · ' : ''}{b.due_day ? `Venc. dia ${b.due_day}` : ''}
+                          </Text>
+                        )}
+                      </View>
                       <View style={[styles.statusBadge, { backgroundColor: b.status === 'ready' ? `${colors.green}20` : `${colors.orange}20` }]}>
                         <Text style={[styles.statusText, { color: b.status === 'ready' ? colors.green : colors.orange }]}>
                           {b.status === 'ready' ? 'Pronto' : 'Pendente'}
@@ -403,6 +439,20 @@ export default function ImportScreen() {
             <TextInput style={[styles.input, { backgroundColor: colors.bg, color: colors.label, borderRadius: radius.md }]}
               placeholder="Nome do banco" placeholderTextColor={colors.tertiaryLabel}
               value={newBankName} onChangeText={setNewBankName} />
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Dia Fechamento</Text>
+                <TextInput style={[styles.input, { backgroundColor: colors.bg, color: colors.label, borderRadius: radius.md }]}
+                  placeholder="Ex: 03" placeholderTextColor={colors.tertiaryLabel} keyboardType="number-pad"
+                  value={newClosingDay} onChangeText={setNewClosingDay} maxLength={2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Dia Vencimento</Text>
+                <TextInput style={[styles.input, { backgroundColor: colors.bg, color: colors.label, borderRadius: radius.md }]}
+                  placeholder="Ex: 09" placeholderTextColor={colors.tertiaryLabel} keyboardType="number-pad"
+                  value={newDueDay} onChangeText={setNewDueDay} maxLength={2} />
+              </View>
+            </View>
             <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Cor</Text>
             <View style={styles.colorRow}>
               {BANK_COLOR_OPTIONS.map(c => (
@@ -418,6 +468,78 @@ export default function ImportScreen() {
                 onPress={handleCreateBank} disabled={bankSaving}>
                 {bankSaving ? <ActivityIndicator size="small" color="#fff" /> :
                   <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>Criar</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── SELECT BANK + MONTH MODAL ── */}
+      <Modal visible={selectModal} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.formModal, { backgroundColor: colors.surface, borderRadius: radius.xl }]}>
+            <Text style={[styles.modalTitle, { color: colors.label, marginBottom: 4 }]}>Importar Fatura</Text>
+            <Text style={[styles.invSub, { color: colors.secondaryLabel, marginBottom: 16 }]}>{fileName}</Text>
+
+            <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Banco</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {banks.map(b => (
+                  <Pressable key={b.slug}
+                    onPress={() => setSelectedBank(b.slug)}
+                    style={[styles.chipBtn, {
+                      backgroundColor: selectedBank === b.slug ? b.color : `${colors.tertiaryLabel}20`,
+                      borderRadius: radius.md,
+                    }]}>
+                    <Text style={{ color: selectedBank === b.slug ? '#fff' : colors.label, fontSize: 13, fontWeight: '600' }}>
+                      {b.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
+
+            <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Mês/Ano da Fatura</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', gap: 4 }}>
+                  {MONTHS.map((m, i) => (
+                    <Pressable key={m}
+                      onPress={() => setSelectedMonth(m)}
+                      style={[styles.chipBtn, {
+                        backgroundColor: selectedMonth === m ? colors.blue : `${colors.tertiaryLabel}20`,
+                        borderRadius: radius.sm, paddingHorizontal: 10,
+                      }]}>
+                      <Text style={{ color: selectedMonth === m ? '#fff' : colors.label, fontSize: 12, fontWeight: '600' }}>
+                        {MONTH_NAMES[i]}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+              {['2025', '2026'].map(y => (
+                <Pressable key={y}
+                  onPress={() => setSelectedYear(y)}
+                  style={[styles.chipBtn, {
+                    backgroundColor: selectedYear === y ? colors.blue : `${colors.tertiaryLabel}20`,
+                    borderRadius: radius.sm, flex: 1,
+                  }]}>
+                  <Text style={{ color: selectedYear === y ? '#fff' : colors.label, fontSize: 14, fontWeight: '600' }}>
+                    {y}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <View style={styles.formActions}>
+              <Pressable onPress={() => { setSelectModal(false); setFileUri(''); setFileName(''); }} style={styles.cancelBtn}>
+                <Text style={[{ color: colors.red, fontSize: 15 }]}>Cancelar</Text>
+              </Pressable>
+              <Pressable style={[styles.saveBtn, { backgroundColor: colors.blue, borderRadius: radius.md }]}
+                onPress={handleUploadWithParams}>
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>Processar</Text>
               </Pressable>
             </View>
           </View>
@@ -493,4 +615,5 @@ const styles = StyleSheet.create({
   colorOption: { width: 32, height: 32, borderRadius: 16 },
   formActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   saveBtn: { paddingHorizontal: 24, paddingVertical: 10 },
+  chipBtn: { paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
 });

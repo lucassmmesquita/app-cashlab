@@ -110,6 +110,7 @@ async def check_duplicate_invoice(
 async def upload_invoice(
     file: UploadFile = File(...),
     bank: str = "auto",
+    reference_month: str = "",
 ):
     """
     Upload de PDF da fatura → detecta banco → parseia → retorna preview.
@@ -183,9 +184,10 @@ async def upload_invoice(
             })
 
         # 8. Store parsed result in memory for confirm step
+        final_ref_month = reference_month if reference_month else result.reference_month
         _pending_pdf_imports[file_id] = {
             "bank": detected_bank,
-            "reference_month": result.reference_month,
+            "reference_month": final_ref_month,
             "due_date": result.due_date.isoformat() if result.due_date else None,
             "total_amount": str(result.total_amount),
             "card_last_digits": result.card_last_digits,
@@ -318,7 +320,7 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
                 installment_num=tx.get("installment_num"),
                 installment_total=tx.get("installment_total"),
                 subcategory=subcategory,
-                who=tx_member.name,
+                who=None,
                 is_international=tx.get("is_international", False),
                 iof_amount=iof_amount,
             )

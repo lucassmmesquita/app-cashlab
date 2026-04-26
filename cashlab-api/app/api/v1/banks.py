@@ -17,8 +17,8 @@ router = APIRouter(prefix="/banks", tags=["Bancos"])
 
 # Default banks with native parsers
 DEFAULT_BANKS = [
-    {"name": "Banco BV", "slug": "bv", "color": "#F5A623", "has_native_parser": True, "status": "ready"},
-    {"name": "Itaú", "slug": "itau", "color": "#FF6B00", "has_native_parser": True, "status": "ready"},
+    {"name": "Banco BV", "slug": "bv", "color": "#F5A623", "has_native_parser": True, "status": "ready", "closing_day": 17, "due_day": 22},
+    {"name": "Itaú", "slug": "itau", "color": "#FF6B00", "has_native_parser": True, "status": "ready", "closing_day": 3, "due_day": 9},
     {"name": "Nubank", "slug": "nubank", "color": "#8A05BE", "has_native_parser": False, "status": "pending"},
 ]
 
@@ -26,11 +26,8 @@ DEFAULT_BANKS = [
 class BankCreate(BaseModel):
     name: str
     color: str = "#007AFF"
-
-
-class BankUpdate(BaseModel):
-    name: Optional[str] = None
-    color: Optional[str] = None
+    closing_day: Optional[int] = None
+    due_day: Optional[int] = None
 
 
 async def ensure_default_banks(db: AsyncSession):
@@ -65,6 +62,8 @@ async def list_banks(db: AsyncSession = Depends(get_db)):
                 "color": b.color,
                 "status": b.status,
                 "has_native_parser": b.has_native_parser,
+                "closing_day": b.closing_day,
+                "due_day": b.due_day,
             }
             for b in banks
         ]
@@ -76,7 +75,6 @@ async def create_bank(payload: BankCreate, db: AsyncSession = Depends(get_db)):
     """Criar um novo banco."""
     slug = payload.name.lower().replace(" ", "_").replace("-", "_")
 
-    # Check unique slug
     existing = await db.execute(select(Bank).where(Bank.slug == slug, Bank.deleted_at == None))
     if existing.scalar_one_or_none():
         raise HTTPException(409, f"Banco '{payload.name}' já existe.")
@@ -87,12 +85,12 @@ async def create_bank(payload: BankCreate, db: AsyncSession = Depends(get_db)):
         color=payload.color,
         status="pending",
         has_native_parser=False,
+        closing_day=payload.closing_day,
+        due_day=payload.due_day,
     )
     db.add(bank)
     await db.commit()
     await db.refresh(bank)
-
-    logger.info(f"Banco criado: {bank.name} ({bank.slug})")
 
     return {
         "data": {
@@ -101,6 +99,8 @@ async def create_bank(payload: BankCreate, db: AsyncSession = Depends(get_db)):
             "slug": bank.slug,
             "color": bank.color,
             "status": bank.status,
+            "closing_day": bank.closing_day,
+            "due_day": bank.due_day,
         }
     }
 

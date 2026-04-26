@@ -60,7 +60,7 @@ export const invoiceService = {
   /**
    * Upload PDF e receber preview das transações extraídas.
    */
-  async upload(fileUri: string, fileName: string, bank: string = 'auto'): Promise<UploadPreview> {
+  async upload(fileUri: string, fileName: string, bank: string = 'auto', referenceMonth: string = ''): Promise<UploadPreview> {
     const formData = new FormData();
 
     if (Platform.OS === 'web') {
@@ -75,7 +75,10 @@ export const invoiceService = {
       } as any);
     }
 
-    const res = await api.post(`/invoices/upload?bank=${bank}`, formData, {
+    const params = new URLSearchParams({ bank });
+    if (referenceMonth) params.set('reference_month', referenceMonth);
+
+    const res = await api.post(`/invoices/upload?${params.toString()}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 30000,
     });
