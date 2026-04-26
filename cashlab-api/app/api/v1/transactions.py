@@ -19,7 +19,7 @@ async def list_transactions(
     category_id: Optional[int] = Query(None, description="Filtro por categoria"),
     search: Optional[str] = Query(None, description="Busca por descrição"),
     page: int = Query(1, ge=1),
-    per_page: int = Query(100, ge=1, le=200),
+    per_page: int = Query(500, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
 ):
     """Listar transações com filtros"""

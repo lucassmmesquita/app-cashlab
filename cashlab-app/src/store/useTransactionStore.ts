@@ -12,7 +12,7 @@ interface TransactionState {
 
 const defaultFilters: TransactionFilters = {
   page: 1,
-  per_page: 50,
+  per_page: 500,
 };
 
 export const useTransactionStore = create<TransactionState>((set) => ({
