@@ -99,13 +99,34 @@ export default function ImportScreen() {
   const handleUploadWithParams = async () => {
     setSelectModal(false);
     setStep('uploading');
+    setError(null);
     try {
       const refMonth = `${selectedYear}-${selectedMonth}`;
       const data = await invoiceService.upload(fileUri, fileName, selectedBank, refMonth);
       setPreview(data);
       setStep('preview');
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Erro ao processar PDF');
+      let errorMsg = 'Erro ao processar PDF';
+      const status = err.response?.status;
+      const detail = err.response?.data?.detail;
+
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        errorMsg = 'Tempo esgotado. O PDF pode ser muito grande. Tente novamente.';
+      } else if (status === 400) {
+        errorMsg = detail || 'Arquivo inválido. Verifique se é um PDF válido.';
+      } else if (status === 422) {
+        errorMsg = detail || 'Não foi possível identificar o banco. Selecione manualmente.';
+      } else if (status === 409) {
+        errorMsg = detail || 'Esta fatura já foi importada anteriormente.';
+      } else if (status === 500) {
+        errorMsg = detail || 'Erro interno ao processar o PDF. Tente novamente.';
+      } else if (!err.response) {
+        errorMsg = 'Sem conexão com o servidor. Verifique sua rede.';
+      } else {
+        errorMsg = detail || err.message || 'Erro desconhecido';
+      }
+
+      setError(errorMsg);
       setStep('idle');
     }
   };

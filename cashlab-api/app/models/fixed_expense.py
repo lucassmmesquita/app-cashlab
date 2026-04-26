@@ -21,3 +21,8 @@ class FixedExpense(Base, TimestampMixin):
     category_id: Mapped[Optional[int]] = mapped_column(ForeignKey("categories.id"), default=None, index=True)
     recurrence: Mapped[str] = mapped_column(String(20), default="mensal")  # mensal, anual
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Vigência: competência de início e fim (formato "YYYY-MM")
+    # Despesa recorrente aparece em todos os meses entre effective_from e effective_until
+    effective_from: Mapped[Optional[str]] = mapped_column(String(7), default=None, index=True)  # "2026-03"
+    effective_until: Mapped[Optional[str]] = mapped_column(String(7), default=None, index=True)  # NULL = sem fim

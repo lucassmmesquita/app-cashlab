@@ -33,10 +33,12 @@ interface Transaction {
   card: string;
   installment: string | null;
   location: string | null;
+  source_type: 'FATURA' | 'GASTO_SEMANAL';
 }
 
 type FilterType = 'all' | 'BV' | 'ITAU';
 type MemberFilter = 'all' | 'LUCAS' | 'JURA' | 'JOICE';
+type SourceFilter = 'all' | 'FATURA' | 'GASTO_SEMANAL';
 
 type ImportStep = 'idle' | 'uploading' | 'preview' | 'confirming';
 interface ImportPreview {
@@ -55,6 +57,7 @@ export default function TransactionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [bankFilter, setBankFilter] = useState<FilterType>('all');
   const [memberFilter, setMemberFilter] = useState<MemberFilter>('all');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [search, setSearch] = useState('');
 
   // Screenshot import state
@@ -69,6 +72,7 @@ export default function TransactionsScreen() {
       const params: Record<string, string> = { month: selectedMonth };
       if (bankFilter !== 'all') params.bank = bankFilter.toLowerCase();
       if (memberFilter !== 'all') params.member = memberFilter;
+      if (sourceFilter !== 'all') params.source_type = sourceFilter;
       if (search.trim()) params.search = search.trim();
 
       const res = await api.get('/transactions', { params });
@@ -78,7 +82,7 @@ export default function TransactionsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [selectedMonth, bankFilter, memberFilter, search]);
+  }, [selectedMonth, bankFilter, memberFilter, sourceFilter, search]);
 
   useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
 
@@ -235,6 +239,24 @@ export default function TransactionsScreen() {
                 </Text>
               </Pressable>
             ))}
+            <View style={styles.chipSpacer} />
+            {(['all', 'FATURA', 'GASTO_SEMANAL'] as SourceFilter[]).map(f => (
+              <Pressable key={f} onPress={() => setSourceFilter(f)}
+                style={[styles.chip, {
+                  backgroundColor: sourceFilter === f ? colors.blue : colors.segmentBg,
+                  borderRadius: 20,
+                }]}>
+                <Ionicons
+                  name={f === 'FATURA' ? 'document-text' : f === 'GASTO_SEMANAL' ? 'camera' : 'layers'}
+                  size={14}
+                  color={sourceFilter === f ? '#fff' : colors.label}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.chipText, { color: sourceFilter === f ? '#fff' : colors.label }]}>
+                  {f === 'all' ? 'Tipo' : f === 'FATURA' ? 'Fatura' : 'Semanal'}
+                </Text>
+              </Pressable>
+            ))}
           </ScrollView>
 
           {/* Summary bar */}
@@ -276,6 +298,12 @@ export default function TransactionsScreen() {
                             {tx.installment && (
                               <View style={[styles.installBadge, { backgroundColor: `${colors.blue}15` }]}>
                                 <Text style={[styles.installText, { color: colors.blue }]}>{tx.installment}</Text>
+                              </View>
+                            )}
+                            {tx.source_type === 'GASTO_SEMANAL' && (
+                              <View style={[styles.installBadge, { backgroundColor: `${colors.orange}15` }]}>
+                                <Ionicons name="camera" size={10} color={colors.orange} />
+                                <Text style={[styles.installText, { color: colors.orange, marginLeft: 2 }]}>Print</Text>
                               </View>
                             )}
                           </View>

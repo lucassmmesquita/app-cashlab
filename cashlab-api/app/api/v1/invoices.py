@@ -274,6 +274,7 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
             pdf_hash=pdf_hash,
             file_size=pending.get("file_size"),
             status="confirmed",
+            source_type="PDF",
             parsed_at=datetime.utcnow(),
         )
         db.add(invoice)
@@ -324,6 +325,7 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
                 is_international=tx.get("is_international", False),
                 iof_amount=iof_amount,
                 billing_month=reference_month,
+                source_type="FATURA",
             )
             db.add(transaction)
             tx_count += 1
@@ -368,11 +370,14 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("")
-async def list_invoices(db: AsyncSession = Depends(get_db)):
+async def list_invoices(
+    month: str = None,
+    db: AsyncSession = Depends(get_db),
+):
     """Listar faturas importadas com informações enriquecidas"""
     from sqlalchemy import func
 
-    result = await db.execute(
+    query = (
         select(
             Invoice,
             CreditCard.bank.label("bank_name"),
@@ -385,9 +390,17 @@ async def list_invoices(db: AsyncSession = Depends(get_db)):
             (Transaction.invoice_id == Invoice.id) & (Transaction.deleted_at == None),
         )
         .where(Invoice.deleted_at == None)
+    )
+
+    if month:
+        query = query.where(Invoice.reference_month == month)
+
+    query = (
+        query
         .group_by(Invoice.id, CreditCard.bank, CreditCard.last_digits)
         .order_by(Invoice.created_at.desc())
     )
+    result = await db.execute(query)
     rows = result.all()
 
     data = []

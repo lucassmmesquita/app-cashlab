@@ -11,6 +11,8 @@ from .budget import Budget
 from .income import Income
 from .fixed_expense import FixedExpense
 from .rule import CategorizationRule, MemberAssignmentRule
+from .goal import SpendingGoal
+from .goal_snapshot import GoalSnapshot
 
 __all__ = [
     # Auth
@@ -34,4 +36,7 @@ __all__ = [
     # Regras
     "CategorizationRule",
     "MemberAssignmentRule",
+    # Metas
+    "SpendingGoal",
+    "GoalSnapshot",
 ]

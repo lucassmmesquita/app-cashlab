@@ -17,6 +17,7 @@ async def list_transactions(
     bank: Optional[str] = Query(None, description="Filtro por banco (bv,itau)"),
     member: Optional[str] = Query(None, description="Filtro por membro (LUCAS,JURA)"),
     category_id: Optional[int] = Query(None, description="Filtro por categoria"),
+    source_type: Optional[str] = Query(None, description="Filtro por tipo (FATURA,GASTO_SEMANAL)"),
     search: Optional[str] = Query(None, description="Busca por descrição"),
     page: int = Query(1, ge=1),
     per_page: int = Query(500, ge=1, le=1000),
@@ -65,6 +66,9 @@ async def list_transactions(
     if search:
         query = query.where(Transaction.description.ilike(f"%{search}%"))
 
+    if source_type:
+        query = query.where(Transaction.source_type == source_type)
+
     # Count
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
@@ -90,6 +94,7 @@ async def list_transactions(
             "installment": f"{tx.installment_num}/{tx.installment_total}" if tx.installment_num and tx.installment_total else None,
             "location": tx.location,
             "billing_month": tx.billing_month,
+            "source_type": tx.source_type,
         })
 
     return {"data": data, "meta": {"page": page, "per_page": per_page, "total": total}}

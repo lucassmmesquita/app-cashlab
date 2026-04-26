@@ -1,11 +1,11 @@
 /**
- * CashLab — Dashboard (iOS Design System v2)
+ * CashLab — Dashboard (dados reais do backend)
  *
- * Visão consolidada do mês. iOS grouped cards. Sem gradientes.
- * Dados mock baseados na spec real (BV + Itaú Abril/2026).
+ * Visão consolidada do mês com dados da API.
+ * Inclui insights financeiros dinâmicos e tendências.
  */
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -21,42 +21,9 @@ import { SummaryRow } from '@/components/dashboard/SummaryCards';
 import { MonthNavigator } from '@/components/dashboard/MonthNavigator';
 import { NotificationBell } from '@/components/dashboard/NotificationBell';
 
-import type { CategoryBreakdown, MemberBreakdown, Alert as AlertType } from '@/types/budget';
-
-// ── Mock Data ─────────────────────────────────────────────────────
-
-const MOCK_CATEGORIES: CategoryBreakdown[] = [
-  { category_name: 'Alimentação', total_amount: '3245.80', percentage: 14.2, transaction_count: 28 },
-  { category_name: 'Supermercado', total_amount: '2890.50', percentage: 12.6, transaction_count: 15 },
-  { category_name: 'Assinaturas e Serviços Digitais', total_amount: '2180.40', percentage: 9.5, transaction_count: 12 },
-  { category_name: 'Combustível', total_amount: '1950.00', percentage: 8.5, transaction_count: 18 },
-  { category_name: 'Automotivo', total_amount: '1800.00', percentage: 7.8, transaction_count: 4 },
-  { category_name: 'Farmácia e Saúde', total_amount: '1520.30', percentage: 6.6, transaction_count: 10 },
-  { category_name: 'Compras Online', total_amount: '1450.00', percentage: 6.3, transaction_count: 8 },
-  { category_name: 'Serviços Pessoais (Estética)', total_amount: '1280.00', percentage: 5.6, transaction_count: 6 },
-  { category_name: 'Lazer e Entretenimento', total_amount: '1150.73', percentage: 5.0, transaction_count: 9 },
-  { category_name: 'Educação', total_amount: '980.00', percentage: 4.3, transaction_count: 3 },
-  { category_name: 'Vestuário', total_amount: '890.50', percentage: 3.9, transaction_count: 7 },
-  { category_name: 'Moradia', total_amount: '750.00', percentage: 3.3, transaction_count: 2 },
-  { category_name: 'Tarifas Bancárias', total_amount: '445.50', percentage: 1.9, transaction_count: 4 },
-  { category_name: 'Outros', total_amount: '400.00', percentage: 1.7, transaction_count: 5 },
-];
-
-const MOCK_MEMBERS: MemberBreakdown[] = [
-  { member_name: 'LUCAS', total_amount: '14520.80', percentage: 63.3 },
-  { member_name: 'JURA', total_amount: '6412.93', percentage: 28.0 },
-  { member_name: 'JOICE', total_amount: '2000.00', percentage: 8.7 },
-];
-
-const MOCK_ALERTS: AlertType[] = [
-  { type: 'critical', message: 'Limite do BV está 99,88% utilizado. Evite novas compras.' },
-  { type: 'warning', message: 'Alimentação ultrapassou o orçamento em R$ 245,80 (+8,2%)' },
-  { type: 'info', message: '3 faturas importadas este mês (BV, Itaú 8001, Itaú 9825)' },
-];
-
-const MOCK_TOTAL_EXPENSES = '22933.73';
-const MOCK_TOTAL_INCOME = '28500.00';
-const MOCK_BALANCE = '5566.27';
+import { dashboardService } from '@/services/dashboardService';
+import type { DashboardResponse, DashboardInsight } from '@/services/dashboardService';
+import type { Alert as AlertType } from '@/types/budget';
 
 // ── Dashboard ─────────────────────────────────────────────────────
 
@@ -64,16 +31,48 @@ export default function DashboardScreen() {
   const { selectedMonth, goToPreviousMonth, goToNextMonth } = useMonthNavigation();
   const { colors, isDark, radius, spacing } = useAppTheme();
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<DashboardResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchDashboard = useCallback(async () => {
+    try {
+      setError(null);
+      const result = await dashboardService.get(selectedMonth);
+      setData(result);
+    } catch (err: any) {
+      setError('Não foi possível carregar o dashboard');
+      console.error('Dashboard error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchDashboard();
+  }, [fetchDashboard]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // TODO: fetch real data from API
-    await new Promise(r => setTimeout(r, 800));
+    await fetchDashboard();
     setRefreshing(false);
-  }, []);
+  }, [fetchDashboard]);
+
+  // Build data for display
+  const totalExpenses = data?.total_card_expenses || '0';
+  const totalIncome = data?.total_income || '0';
+  const balance = data?.balance || '0';
+  const categories = data?.by_category || [];
+  const members = data?.by_member || [];
+  const insights = data?.insights || [];
+  const alerts: AlertType[] = (data?.alerts || []).map(a => ({
+    type: a.type as 'critical' | 'warning' | 'info',
+    message: a.message,
+  }));
 
   // Build donut segments
-  const categorySegments: DonutSegment[] = MOCK_CATEGORIES.map((cat) => ({
+  const categorySegments: DonutSegment[] = categories.map((cat) => ({
     label: cat.category_name,
     value: parseFloat(cat.total_amount),
     color: getCategoryColor(cat.category_name, isDark),
@@ -94,7 +93,7 @@ export default function DashboardScreen() {
           {/* Header */}
           <View style={styles.headerRow}>
             <Text style={[styles.largeTitle, { color: colors.label }]}>Summary</Text>
-            <NotificationBell notifications={MOCK_ALERTS} />
+            <NotificationBell notifications={alerts} />
           </View>
 
           {/* Segment control placeholder */}
@@ -114,74 +113,150 @@ export default function DashboardScreen() {
             onNext={goToNextMonth}
           />
 
-          {/* Expense total card */}
-          <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
-            <Text style={[styles.cardLabel, { color: colors.secondaryLabel }]}>Despesa total</Text>
-            <Text style={[styles.heroValue, { color: colors.label }]}>
-              R$ 22.933,73
-            </Text>
-          </View>
-
-          {/* Summary */}
-          <SummaryRow
-            totalExpenses={MOCK_TOTAL_EXPENSES}
-            totalIncome={MOCK_TOTAL_INCOME}
-            balance={MOCK_BALANCE}
-          />
-
-
-
-          {/* Donut Chart */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.title2, { color: colors.label }]}>Gastos por categoria</Text>
-          </View>
-
-          <View style={[styles.chartCard, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
-            <View style={styles.chartContainer}>
-              <DonutChart
-                segments={categorySegments}
-                size={200}
-                strokeWidth={28}
-                centerValue={formatCurrency(MOCK_TOTAL_EXPENSES)}
-                centerLabel="total"
-              />
+          {/* Loading */}
+          {loading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.blue} />
             </View>
-          </View>
+          )}
 
-          {/* Category Legend */}
-          <CategoryLegend segments={categorySegments} />
+          {/* Error */}
+          {error && !loading && (
+            <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: 20, alignItems: 'center' }]}>
+              <Ionicons name="warning-outline" size={32} color={colors.red} />
+              <Text style={[styles.errorText, { color: colors.red }]}>{error}</Text>
+              <Pressable
+                style={({ pressed }) => [styles.retryBtn, { backgroundColor: colors.blue, opacity: pressed ? 0.85 : 1 }]}
+                onPress={fetchDashboard}
+              >
+                <Text style={styles.retryText}>Tentar novamente</Text>
+              </Pressable>
+            </View>
+          )}
 
-          {/* Members */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.title2, { color: colors.label }]}>Gastos por membro</Text>
-          </View>
+          {/* Data */}
+          {!loading && data && (
+            <>
+              {/* Expense total card */}
+              <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
+                <Text style={[styles.cardLabel, { color: colors.secondaryLabel }]}>Despesa total</Text>
+                <Text style={[styles.heroValue, { color: colors.label }]}>
+                  {formatCurrency(totalExpenses)}
+                </Text>
+              </View>
 
-          <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
-            {MOCK_MEMBERS.map((member, index) => {
-              const memberColor = getMemberColor(member.member_name, isDark);
-              return (
-                <View key={member.member_name}>
-                  {index > 0 && (
-                    <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: 52 }]} />
-                  )}
-                  <View style={styles.memberRow}>
-                    <View style={[styles.memberAvatar, { backgroundColor: memberColor }]}>
-                      <Text style={styles.memberInitial}>{member.member_name[0]}</Text>
-                    </View>
-                    <View style={styles.memberBody}>
-                      <Text style={[styles.memberName, { color: colors.label }]}>{member.member_name}</Text>
-                      <Text style={[styles.memberPct, { color: colors.secondaryLabel }]}>
-                        {member.percentage.toFixed(1).replace('.', ',')}%
-                      </Text>
-                    </View>
-                    <Text style={[styles.memberValue, { color: colors.label }]}>
-                      {formatCurrency(member.total_amount)}
-                    </Text>
+              {/* Summary */}
+              <SummaryRow
+                totalExpenses={data.total_expenses || totalExpenses}
+                totalIncome={totalIncome}
+                balance={balance}
+              />
+
+              {/* ── Insights Financeiros ── */}
+              {insights.length > 0 && (
+                <>
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.title2, { color: colors.label }]}>Insights</Text>
                   </View>
+                  <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
+                    {insights.map((insight, index) => {
+                      const iconName = insight.type === 'critical' ? 'alert-circle' :
+                        insight.type === 'warning' ? 'warning' : 'information-circle';
+                      const iconColor = insight.type === 'critical' ? colors.red :
+                        insight.type === 'warning' ? colors.orange : colors.blue;
+                      return (
+                        <View key={index}>
+                          {index > 0 && (
+                            <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: 44 }]} />
+                          )}
+                          <View style={styles.insightRow}>
+                            <Ionicons name={iconName as any} size={20} color={iconColor} />
+                            <View style={styles.insightBody}>
+                              <Text style={[styles.insightTitle, { color: colors.label }]}>{insight.title}</Text>
+                              <Text style={[styles.insightMsg, { color: colors.secondaryLabel }]}>{insight.message}</Text>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {/* Donut Chart */}
+              {categories.length > 0 && (
+                <>
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.title2, { color: colors.label }]}>Gastos por categoria</Text>
+                  </View>
+
+                  <View style={[styles.chartCard, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
+                    <View style={styles.chartContainer}>
+                      <DonutChart
+                        segments={categorySegments}
+                        size={200}
+                        strokeWidth={28}
+                        centerValue={formatCurrency(totalExpenses)}
+                        centerLabel="total"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Category Legend */}
+                  <CategoryLegend segments={categorySegments} />
+                </>
+              )}
+
+              {/* Members */}
+              {members.length > 0 && (
+                <>
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.title2, { color: colors.label }]}>Gastos por membro</Text>
+                  </View>
+
+                  <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
+                    {members.map((member, index) => {
+                      const memberColor = getMemberColor(member.member_name, isDark);
+                      return (
+                        <View key={member.member_name}>
+                          {index > 0 && (
+                            <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: 52 }]} />
+                          )}
+                          <View style={styles.memberRow}>
+                            <View style={[styles.memberAvatar, { backgroundColor: memberColor }]}>
+                              <Text style={styles.memberInitial}>{member.member_name[0]}</Text>
+                            </View>
+                            <View style={styles.memberBody}>
+                              <Text style={[styles.memberName, { color: colors.label }]}>{member.member_name}</Text>
+                              <Text style={[styles.memberPct, { color: colors.secondaryLabel }]}>
+                                {member.percentage.toFixed(1).replace('.', ',')}%
+                              </Text>
+                            </View>
+                            <Text style={[styles.memberValue, { color: colors.label }]}>
+                              {formatCurrency(member.total_amount)}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {/* Empty state */}
+              {categories.length === 0 && members.length === 0 && (
+                <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: 24, alignItems: 'center' }]}>
+                  <Ionicons name="receipt-outline" size={48} color={colors.tertiaryLabel} />
+                  <Text style={[styles.emptyText, { color: colors.secondaryLabel }]}>
+                    Nenhuma transação no mês
+                  </Text>
+                  <Text style={[styles.emptySubtext, { color: colors.tertiaryLabel }]}>
+                    Importe faturas em Cartões para ver o resumo aqui
+                  </Text>
                 </View>
-              );
-            })}
-          </View>
+              )}
+            </>
+          )}
 
           {/* Import CTA */}
           <Pressable
@@ -247,6 +322,18 @@ const styles = StyleSheet.create({
   chartCard: { padding: 16, alignItems: 'center' },
   chartContainer: { paddingVertical: 8 },
 
+  // Insights
+  insightRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  insightBody: { flex: 1, gap: 2 },
+  insightTitle: { fontSize: 14, fontWeight: '600' },
+  insightMsg: { fontSize: 13 },
+
   // Members
   memberRow: {
     flexDirection: 'row',
@@ -268,6 +355,18 @@ const styles = StyleSheet.create({
   memberPct: { fontSize: 12 },
   memberValue: { fontSize: 15, fontWeight: '600' },
   separator: { height: 0.5 },
+
+  // Loading
+  loadingContainer: { paddingVertical: 60, alignItems: 'center' },
+
+  // Error
+  errorText: { fontSize: 15, fontWeight: '500', marginTop: 8 },
+  retryBtn: { marginTop: 12, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  retryText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+
+  // Empty
+  emptyText: { fontSize: 15, marginTop: 12 },
+  emptySubtext: { fontSize: 13, textAlign: 'center', marginTop: 4, paddingHorizontal: 24 },
 
   // CTA
   ctaButton: {

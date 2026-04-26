@@ -22,3 +22,8 @@ class Income(Base, TimestampMixin):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     earmarked_for: Mapped[Optional[str]] = mapped_column(String(100), default=None)  # Verba carimbada (ex: "Lazer")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Vigência: competência de início e fim (formato "YYYY-MM")
+    # Receita recorrente aparece em todos os meses entre effective_from e effective_until
+    effective_from: Mapped[Optional[str]] = mapped_column(String(7), default=None, index=True)  # "2026-03"
+    effective_until: Mapped[Optional[str]] = mapped_column(String(7), default=None, index=True)  # NULL = sem fim

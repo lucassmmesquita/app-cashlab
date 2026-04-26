@@ -48,6 +48,9 @@ class Transaction(Base, TimestampMixin, SoftDeleteMixin):
     notes: Mapped[Optional[str]] = mapped_column(Text, default=None)
     billing_month: Mapped[Optional[str]] = mapped_column(String(7), default=None, index=True)  # "2026-04"
 
+    # Tipo de origem: FATURA (PDF oficial) ou GASTO_SEMANAL (print/screenshot)
+    source_type: Mapped[str] = mapped_column(String(20), default="FATURA", nullable=False)  # FATURA | GASTO_SEMANAL
+
     # Relationships
     invoice = relationship("Invoice", back_populates="transactions")
     card = relationship("CreditCard")

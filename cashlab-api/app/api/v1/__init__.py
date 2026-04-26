@@ -12,6 +12,7 @@ from .categories import router as categories_router
 from .export import router as export_router
 from .transactions_import import router as transactions_import_router
 from .banks import router as banks_router
+from .goals import router as goals_router
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -28,3 +29,4 @@ api_router.include_router(categories_router)
 api_router.include_router(export_router)
 api_router.include_router(transactions_import_router)
 api_router.include_router(banks_router)
+api_router.include_router(goals_router)

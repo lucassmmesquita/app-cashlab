@@ -78,12 +78,31 @@ export const invoiceService = {
     const params = new URLSearchParams({ bank });
     if (referenceMonth) params.set('reference_month', referenceMonth);
 
-    const res = await api.post(`/invoices/upload?${params.toString()}`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 30000,
-    });
+    // Retry with backoff — max 2 attempts
+    const maxRetries = 2;
+    let lastError: any;
 
-    return res.data.data;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await api.post(`/invoices/upload?${params.toString()}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000, // 120s — PDFs grandes podem demorar
+        });
+        return res.data.data;
+      } catch (err: any) {
+        lastError = err;
+        // Don't retry on client errors (4xx)
+        if (err.response?.status && err.response.status >= 400 && err.response.status < 500) {
+          throw err;
+        }
+        // Wait before retrying (exponential backoff)
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000; // 1s, 2s
+          await new Promise(r => setTimeout(r, delay));
+        }
+      }
+    }
+    throw lastError;
   },
 
   /**

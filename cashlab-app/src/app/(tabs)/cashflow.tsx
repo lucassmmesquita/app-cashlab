@@ -12,12 +12,23 @@ import { useMonthNavigation } from '@/hooks/useMonthNavigation';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { MonthNavigator } from '@/components/dashboard/MonthNavigator';
 import { formatCurrency } from '@/utils/formatters';
+import { bankService } from '@/services/bankService';
+import type { BankItem } from '@/services/bankService';
 import { BANK_COLORS } from '@/utils/colors';
 import api from '@/services/api';
 
 interface IncomeItem { id: number; source: string; amount: number; type: string; note: string; }
 interface ExpenseItem { id: number; description: string; amount: number; category: string; note: string; }
 interface CardInvoice { id: number; reference_month: string; due_date: string | null; total_amount: string; card_id: number; bank?: string; }
+
+// Goal types
+interface GoalItem {
+  id: number; name: string; card_id: number | null;
+  target_reduction_pct: number; baseline_month: string;
+  baseline_amount: string; target_amount: string; target_month: string;
+  status: string; current_amount?: string; progress_pct?: number;
+  created_at: string | null;
+}
 
 // Fallback data used when API returns empty
 const FALLBACK_INCOMES: IncomeItem[] = [
@@ -43,8 +54,17 @@ export default function CashFlowScreen() {
   const [incomes, setIncomes] = useState<IncomeItem[]>(FALLBACK_INCOMES);
   const [expenses, setExpenses] = useState<ExpenseItem[]>(FALLBACK_EXPENSES);
   const [invoices, setInvoices] = useState<CardInvoice[]>([]);
+  const [goals, setGoals] = useState<GoalItem[]>([]);
+  const [banks, setBanks] = useState<BankItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Goal modal state
+  const [goalModalVisible, setGoalModalVisible] = useState(false);
+  const [goalPct, setGoalPct] = useState('30');
+  const [goalName, setGoalName] = useState('');
+  const [goalCardId, setGoalCardId] = useState<number | null>(null);
+  const [goalSaving, setGoalSaving] = useState(false);
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -60,10 +80,12 @@ export default function CashFlowScreen() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [incRes, expRes, invRes] = await Promise.all([
-        api.get('/incomes'),
-        api.get('/fixed-expenses'),
-        api.get('/invoices'),
+      const [incRes, expRes, invRes, goalsRes, banksRes] = await Promise.all([
+        api.get('/incomes', { params: { month: selectedMonth } }),
+        api.get('/fixed-expenses', { params: { month: selectedMonth } }),
+        api.get('/invoices', { params: { month: selectedMonth } }),
+        api.get('/goals', { params: { status: 'active' } }).catch(() => ({ data: { data: [] } })),
+        bankService.list().catch(() => []),
       ]);
       const incData = incRes.data?.data || [];
       const expData = expRes.data?.data || [];
@@ -71,12 +93,14 @@ export default function CashFlowScreen() {
       setIncomes(incData.length > 0 ? incData : FALLBACK_INCOMES);
       setExpenses(expData.length > 0 ? expData : FALLBACK_EXPENSES);
       setInvoices(invData);
+      setGoals(goalsRes.data?.data || []);
+      setBanks(Array.isArray(banksRes) ? banksRes : []);
     } catch {
       // keep current/fallback data
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedMonth]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -156,6 +180,47 @@ export default function CashFlowScreen() {
             setExpenses(prev => prev.filter(e => e.id !== id));
           }
         } catch { Alert.alert('Erro', 'Não foi possível excluir'); }
+      }},
+    ]);
+  };
+
+  // Goal handlers
+  const handleCreateGoal = async () => {
+    const pct = parseInt(goalPct);
+    if (!pct || pct < 1 || pct > 100) {
+      Alert.alert('Erro', 'Percentual deve ser entre 1 e 100'); return;
+    }
+    setGoalSaving(true);
+    try {
+      // Baseline = mês anterior, target = mês selecionado
+      const [y, m] = selectedMonth.split('-').map(Number);
+      const prevM = m === 1 ? 12 : m - 1;
+      const prevY = m === 1 ? y - 1 : y;
+      const baselineMonth = `${prevY}-${String(prevM).padStart(2, '0')}`;
+
+      await api.post('/goals', {
+        target_reduction_pct: pct,
+        baseline_month: baselineMonth,
+        target_month: selectedMonth,
+        name: goalName.trim() || undefined,
+        card_id: goalCardId || undefined,
+      });
+      setGoalModalVisible(false);
+      setGoalPct('30');
+      setGoalName('');
+      setGoalCardId(null);
+      fetchData();
+    } catch (err: any) {
+      Alert.alert('Erro', err.response?.data?.detail || 'Não foi possível criar a meta');
+    } finally { setGoalSaving(false); }
+  };
+
+  const handleDeleteGoal = (id: number, name: string) => {
+    Alert.alert('Excluir Meta', `Deseja excluir "${name}"?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: async () => {
+        try { await api.delete(`/goals/${id}`); fetchData(); }
+        catch { Alert.alert('Erro', 'Não foi possível excluir'); }
       }},
     ]);
   };
@@ -328,6 +393,78 @@ export default function CashFlowScreen() {
             )}
           </View>
 
+          {/* ── METAS DE REDUÇÃO ── */}
+          <View style={styles.sectionHeader}>
+            <Ionicons name="flag" size={18} color={colors.blue} />
+            <Text style={[styles.sectionTitle, { color: colors.label }]}>Metas de Redução</Text>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity onPress={() => setGoalModalVisible(true)} style={[styles.addBtn, { backgroundColor: `${colors.blue}15` }]}>
+              <Ionicons name="add" size={20} color={colors.blue} />
+            </TouchableOpacity>
+          </View>
+
+          {goals.length === 0 ? (
+            <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: 20, alignItems: 'center' }]}>
+              <Ionicons name="flag-outline" size={32} color={colors.tertiaryLabel} />
+              <Text style={[styles.lineNote, { color: colors.tertiaryLabel, marginTop: 8 }]}>
+                Defina uma meta de redução de gastos
+              </Text>
+              <Text style={[styles.lineNote, { color: colors.tertiaryLabel, marginTop: 4 }]}>
+                Ex: Reduzir 30% nos gastos do cartão
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
+              {goals.map((goal, i) => {
+                const progress = goal.progress_pct ?? 0;
+                const statusColor = goal.status === 'achieved' ? colors.green :
+                  goal.status === 'missed' ? colors.red :
+                  progress >= 80 ? colors.green :
+                  progress >= 40 ? colors.orange : colors.red;
+                const statusEmoji = goal.status === 'achieved' ? '🎉' :
+                  goal.status === 'missed' ? '❌' :
+                  progress >= 80 ? '✅' : progress >= 40 ? '⚠️' : '🚨';
+                return (
+                  <View key={goal.id}>
+                    {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator, marginLeft: 16 }]} />}
+                    <View style={styles.lineRow}>
+                      <View style={styles.lineBody}>
+                        <Text style={[styles.lineTitle, { color: colors.label }]}>
+                          {statusEmoji} {goal.name}
+                        </Text>
+                        <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>
+                          Base: {formatCurrency(goal.baseline_amount)} → Meta: {formatCurrency(goal.target_amount)}
+                        </Text>
+                        <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>
+                          {goal.baseline_month} → {goal.target_month} · Redução: {goal.target_reduction_pct}%
+                        </Text>
+                        {goal.current_amount && (
+                          <Text style={[styles.lineNote, { color: statusColor, fontWeight: '600', marginTop: 2 }]}>
+                            Atual: {formatCurrency(goal.current_amount)} · Progresso: {progress.toFixed(0)}%
+                          </Text>
+                        )}
+                        {/* Progress bar */}
+                        <View style={[styles.goalProgressBg, { backgroundColor: colors.segmentBg, marginTop: 6 }]}>
+                          <View style={[styles.goalProgressFill, {
+                            backgroundColor: statusColor,
+                            width: `${Math.min(progress, 100)}%`,
+                          }]} />
+                        </View>
+                      </View>
+                      <View style={styles.rowActions}>
+                        {goal.status === 'active' && (
+                          <TouchableOpacity onPress={() => handleDeleteGoal(goal.id, goal.name || 'Meta')} hitSlop={{top:8,bottom:8,left:8,right:8}}>
+                            <Ionicons name="trash-outline" size={16} color={colors.red} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
           <View style={{ height: 100 }} />
         </ScrollView>
       </SafeAreaView>
@@ -370,6 +507,71 @@ export default function CashFlowScreen() {
               onPress={handleSave} disabled={saving}>
               {saving ? <ActivityIndicator color="#fff" /> :
                 <Text style={styles.saveBtnText}>{modalMode === 'add' ? 'Adicionar' : 'Salvar'}</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Goal Create Modal */}
+      <Modal visible={goalModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.label }]}>Nova Meta de Redução</Text>
+              <TouchableOpacity onPress={() => setGoalModalVisible(false)}>
+                <Ionicons name="close-circle" size={28} color={colors.tertiaryLabel} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.fieldLabel, { color: colors.secondaryLabel }]}>Nome da meta (opcional)</Text>
+            <TextInput style={[styles.input, { color: colors.label, backgroundColor: colors.bg, borderColor: colors.separator }]}
+              value={goalName} onChangeText={setGoalName} placeholder="Ex: Reduzir cartão BV"
+              placeholderTextColor={colors.tertiaryLabel} />
+
+            <Text style={[styles.fieldLabel, { color: colors.secondaryLabel }]}>Percentual de redução (%)</Text>
+            <TextInput style={[styles.input, { color: colors.label, backgroundColor: colors.bg, borderColor: colors.separator }]}
+              value={goalPct} onChangeText={setGoalPct} placeholder="30"
+              placeholderTextColor={colors.tertiaryLabel} keyboardType="number-pad" maxLength={3} />
+
+            <Text style={[styles.fieldLabel, { color: colors.secondaryLabel }]}>Cartão (opcional)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setGoalCardId(null)}
+                  style={[styles.chipBtn, {
+                    backgroundColor: goalCardId === null ? colors.blue : `${colors.tertiaryLabel}20`,
+                    borderRadius: 8,
+                    paddingHorizontal: 12, paddingVertical: 8
+                  }]}>
+                  <Text style={{ color: goalCardId === null ? '#fff' : colors.label, fontSize: 13, fontWeight: '600' }}>
+                    Todos os cartões
+                  </Text>
+                </TouchableOpacity>
+                {banks.map(b => (
+                  <TouchableOpacity key={b.id}
+                    onPress={() => setGoalCardId(b.id)}
+                    style={[styles.chipBtn, {
+                      backgroundColor: goalCardId === b.id ? b.color : `${colors.tertiaryLabel}20`,
+                      borderRadius: 8,
+                      paddingHorizontal: 12, paddingVertical: 8
+                    }]}>
+                    <Text style={{ color: goalCardId === b.id ? '#fff' : colors.label, fontSize: 13, fontWeight: '600' }}>
+                      {b.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <Text style={[styles.lineNote, { color: colors.tertiaryLabel, marginTop: 4 }]}>
+              Mês base: anterior ao selecionado · Mês alvo: {selectedMonth}
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.saveBtn, { backgroundColor: colors.blue }]}
+              onPress={handleCreateGoal} disabled={goalSaving}>
+              {goalSaving ? <ActivityIndicator color="#fff" /> :
+                <Text style={styles.saveBtnText}>Criar Meta</Text>}
             </TouchableOpacity>
           </View>
         </View>
@@ -418,4 +620,7 @@ const styles = StyleSheet.create({
   input: { height: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, fontSize: 16 },
   saveBtn: { height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 24 },
   saveBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  chipBtn: { paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
+  goalProgressBg: { height: 6, borderRadius: 3 },
+  goalProgressFill: { height: 6, borderRadius: 3 },
 });

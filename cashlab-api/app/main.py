@@ -14,9 +14,67 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.core import settings, init_db, hash_password
-from app.core.database import async_session_maker
+from app.core.database import async_session_maker, engine
 from app.api.v1 import api_router
 from app.models import User, FamilyGroup, Member, Category
+
+
+async def auto_migrate():
+    """
+    Auto-migrate: adiciona colunas/tabelas novas.
+    Cada SQL roda em sua própria transação (Postgres exige isso para ignorar erros).
+    Usa ADD COLUMN IF NOT EXISTS (PostgreSQL 9.6+).
+    """
+    from sqlalchemy import text
+
+    migrations = [
+        "ALTER TABLE incomes ADD COLUMN IF NOT EXISTS effective_from VARCHAR(7) DEFAULT NULL",
+        "ALTER TABLE incomes ADD COLUMN IF NOT EXISTS effective_until VARCHAR(7) DEFAULT NULL",
+        "ALTER TABLE fixed_expenses ADD COLUMN IF NOT EXISTS effective_from VARCHAR(7) DEFAULT NULL",
+        "ALTER TABLE fixed_expenses ADD COLUMN IF NOT EXISTS effective_until VARCHAR(7) DEFAULT NULL",
+        "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS source_type VARCHAR(20) NOT NULL DEFAULT 'FATURA'",
+        "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS source_type VARCHAR(20) NOT NULL DEFAULT 'PDF'",
+        """CREATE TABLE IF NOT EXISTS spending_goals (
+            id SERIAL PRIMARY KEY,
+            family_group_id INTEGER NOT NULL REFERENCES family_groups(id),
+            card_id INTEGER REFERENCES credit_cards(id),
+            target_reduction_pct INTEGER NOT NULL,
+            baseline_month VARCHAR(7) NOT NULL,
+            baseline_amount NUMERIC(12,2) NOT NULL,
+            target_amount NUMERIC(12,2) NOT NULL,
+            target_month VARCHAR(7) NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'active',
+            name VARCHAR(100),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            deleted_at TIMESTAMP WITH TIME ZONE
+        )""",
+        """CREATE TABLE IF NOT EXISTS goal_snapshots (
+            id SERIAL PRIMARY KEY,
+            goal_id INTEGER NOT NULL REFERENCES spending_goals(id),
+            snapshot_date DATE NOT NULL,
+            current_amount NUMERIC(12,2) NOT NULL,
+            source VARCHAR(20) NOT NULL DEFAULT 'FATURA',
+            notes TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_incomes_effective_from ON incomes(effective_from)",
+        "CREATE INDEX IF NOT EXISTS idx_fixed_expenses_effective_from ON fixed_expenses(effective_from)",
+        "CREATE INDEX IF NOT EXISTS idx_spending_goals_family ON spending_goals(family_group_id)",
+        "CREATE INDEX IF NOT EXISTS idx_goal_snapshots_goal ON goal_snapshots(goal_id)",
+        "UPDATE incomes SET effective_from = '2026-03' WHERE effective_from IS NULL",
+        "UPDATE fixed_expenses SET effective_from = '2026-03' WHERE effective_from IS NULL",
+    ]
+
+    for sql in migrations:
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(sql))
+        except Exception:
+            pass
+
+    print("✅ Auto-migrate complete")
 
 
 async def seed_initial_data():
@@ -124,9 +182,9 @@ async def seed_initial_data():
                 fg_id = fg.id if fg else 1
 
                 incomes_data = [
-                    {"source": "iRede CLT", "type": "CLT", "amount": 6700.00, "earmarked_for": "Salário registrado"},
-                    {"source": "iRede PJ", "type": "PJ", "amount": 17500.00, "earmarked_for": "Pró-labore / nota fiscal"},
-                    {"source": "Totalis", "type": "PJ/Extra", "amount": 2000.00, "earmarked_for": "Receita adicional"},
+                    {"source": "iRede CLT", "type": "CLT", "amount": 6700.00, "earmarked_for": "Salário registrado", "effective_from": "2026-03"},
+                    {"source": "iRede PJ", "type": "PJ", "amount": 17500.00, "earmarked_for": "Pró-labore / nota fiscal", "effective_from": "2026-03"},
+                    {"source": "Totalis", "type": "PJ/Extra", "amount": 2000.00, "earmarked_for": "Receita adicional", "effective_from": "2026-03"},
                 ]
                 for inc_data in incomes_data:
                     income = Income(family_group_id=fg_id, **inc_data)
@@ -148,11 +206,11 @@ async def seed_initial_data():
                 fg_id = fg.id if fg else 1
 
                 expenses_data = [
-                    {"description": "Aluguel + Cond + Água + Gás", "amount": 4645.50, "recurrence": "Moradia"},
-                    {"description": "Financiamento do carro", "amount": 1650.42, "recurrence": "Automotivo"},
-                    {"description": "Energia elétrica (média)", "amount": 800.00, "recurrence": "Moradia"},
-                    {"description": "Ajuda Pais da Joice", "amount": 500.00, "recurrence": "Família"},
-                    {"description": "Ajuda Pais do Lucas", "amount": 500.00, "recurrence": "Família"},
+                    {"description": "Aluguel + Cond + Água + Gás", "amount": 4645.50, "recurrence": "Moradia", "effective_from": "2026-03"},
+                    {"description": "Financiamento do carro", "amount": 1650.42, "recurrence": "Automotivo", "effective_from": "2026-03"},
+                    {"description": "Energia elétrica (média)", "amount": 800.00, "recurrence": "Moradia", "effective_from": "2026-03"},
+                    {"description": "Ajuda Pais da Joice", "amount": 500.00, "recurrence": "Família", "effective_from": "2026-03"},
+                    {"description": "Ajuda Pais do Lucas", "amount": 500.00, "recurrence": "Família", "effective_from": "2026-03"},
                 ]
                 for exp_data in expenses_data:
                     expense = FixedExpense(family_group_id=fg_id, **exp_data)
@@ -168,6 +226,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
     await init_db()
+    await auto_migrate()
     await seed_initial_data()
     yield
     # Shutdown

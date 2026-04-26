@@ -24,6 +24,7 @@ class Invoice(Base, TimestampMixin, SoftDeleteMixin):
     pdf_hash: Mapped[Optional[str]] = mapped_column(String(64), default=None, index=True)  # MD5 or UUID
     file_size: Mapped[Optional[int]] = mapped_column(Integer, default=None)  # bytes
     status: Mapped[str] = mapped_column(String(20), default="imported")  # imported, confirmed, rejected
+    source_type: Mapped[str] = mapped_column(String(20), default="PDF", nullable=False)  # PDF | SCREENSHOT
     parsed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
 
     # Relationships

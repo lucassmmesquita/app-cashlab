@@ -178,6 +178,7 @@ async def import_screenshot(
 @router.post("/import-screenshot/{file_id}/confirm")
 async def confirm_screenshot_import(
     file_id: str,
+    reference_month: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Confirmar importação de transações extraídas do screenshot."""
@@ -211,12 +212,14 @@ async def confirm_screenshot_import(
             await db.flush()
 
         # Create a pseudo-invoice for these transactions
-        ref_month = datetime.utcnow().strftime("%Y-%m")
+        # Priority: user param > pending store > current month
+        ref_month = reference_month or pending.get("reference_month") or datetime.utcnow().strftime("%Y-%m")
         invoice = InvoiceModel(
             card_id=card.id,
             reference_month=ref_month,
             total_amount=sum(tx["amount"] for tx in pending["transactions"]),
             status="confirmed",
+            source_type="SCREENSHOT",
             parsed_at=datetime.utcnow(),
             pdf_file_path=pending["file_path"],
             pdf_hash=file_id,
@@ -261,6 +264,8 @@ async def confirm_screenshot_import(
                 raw_description=tx_data["description"],
                 amount=tx_data["amount"],
                 who=tx_member.name,
+                billing_month=ref_month,
+                source_type="GASTO_SEMANAL",
             )
             db.add(transaction)
             tx_count += 1
