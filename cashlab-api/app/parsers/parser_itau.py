@@ -40,24 +40,27 @@ RE_AMOUNT = re.compile(r"R?\$?\s*([\d.]+,\d{2})")
 # Parcela no Itaú: XX/YY (duas dígitos/duas dígitos)
 RE_INSTALLMENT = re.compile(r"(\d{2})/(\d{2})")
 
-# Seção por cartão: "Cartão final 8001 - LUCAS" ou "Cartão final 8001"
+# Seção por cartão: "Cartão final 8001 - LUCAS" ou "Cartão final 8001" ou "Cartão 5122.XXXX.XXXX.8001"
 RE_CARD_SECTION = re.compile(
-    r"[Cc]art[aã]o\s+final\s+(\d{4})(?:\s*[-–]\s*(\w+))?", re.IGNORECASE
+    r"[Cc]art[aã]o\s+(?:final\s+)?(\d{4})(?:\s*[-–]\s*(\w+))?", re.IGNORECASE
 )
+RE_CARD_MASKED = re.compile(r"[Cc]art[aã]o\s+\d{4}\.\w+\.\w+\.(\d{4})")
 
-# Total da fatura
-RE_TOTAL = re.compile(r"Total\s+(?:da\s+)?fatura.*?([\d.]+,\d{2})", re.IGNORECASE)
+# Total da fatura (handles no-space: "Totaldestafatura 10.962,06" or "Total desta fatura 10.962,06")
+RE_TOTAL = re.compile(r"Total\s*(?:de\s*)?(?:sta|desta|da)?\s*fatura\s*([\d.]+,\d{2})", re.IGNORECASE)
 
-# Vencimento
-RE_DUE_DATE = re.compile(r"Vencimento.*?(\d{2}/\d{2}/\d{4})", re.IGNORECASE)
+# Vencimento (handles no-space: "Vencimento:09/04/2026" or "vencimento em 09/04/2026")
+RE_DUE_DATE = re.compile(r"[Vv]encimento[:\s]*(?:em\s*)?(\d{2}/\d{2}/\d{4})")
 
-# Mês de referência: "ABR/2026", "Abril 2026", "ABR 2026"
+# Mês de referência: "ABR/2026", "Abril 2026", "Fechamento:02/05/2026"
 RE_REF_MONTH = re.compile(
     r"(?:Janeiro|Fevereiro|Mar[cç]o|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro"
     r"|JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)"
     r"\s*/?\.?\s*(\d{4})",
     re.IGNORECASE,
 )
+# Fallback: extract ref month from "Fechamento:DD/MM/YYYY"
+RE_FECHAMENTO = re.compile(r"[Ff]echamento[:\s]*(\d{2})/(\d{2})/(\d{4})")
 
 # Internacional: USD/EUR/GBP
 RE_INTL_CURRENCY = re.compile(r"(USD|EUR|GBP)\s+([\d.]+,\d{2})", re.IGNORECASE)
@@ -81,15 +84,21 @@ MONTH_MAP = {
 # Linhas a ignorar
 SKIP_PATTERNS = [
     re.compile(r"^\s*$"),
-    re.compile(r"^(TOTAL|Total\s+(da\s+)?fatura|Pagamento\s+m[ií]nimo)", re.IGNORECASE),
-    re.compile(r"^(Limite|Cr[eé]dito\s+dispon[ií]vel|Encargos)", re.IGNORECASE),
-    re.compile(r"^(SAC|Central\s+de\s+Atendimento|Ouvidoria)", re.IGNORECASE),
-    re.compile(r"^(P[aá]gina\s+\d)", re.IGNORECASE),
-    re.compile(r"^(Data\s+Descri)", re.IGNORECASE),
-    re.compile(r"^(Produtos?\s+e\s+Servi)", re.IGNORECASE),
-    re.compile(r"^(Resumo|Parcelas\s+futuras)", re.IGNORECASE),
-    re.compile(r"^(Para\s+sua\s+seguran|Dicas\s+de\s+seguran)", re.IGNORECASE),
-    re.compile(r"^(www\.|itau\.com)", re.IGNORECASE),
+    re.compile(r"Total\s*(de\s*)?(sta|desta|da)?\s*fatura", re.IGNORECASE),
+    re.compile(r"(Pagamento\s*m[ií]nimo|Limite|Cr[eé]dito|Encargos)", re.IGNORECASE),
+    re.compile(r"(SAC|Central\s*de\s*Atendimento|Ouvidoria)", re.IGNORECASE),
+    re.compile(r"(P[aá]gina\s*\d)", re.IGNORECASE),
+    re.compile(r"(Data\s+Descri|DATA\s+DESCRI)", re.IGNORECASE),
+    re.compile(r"(Produtos?\s*e\s*Servi|produtoseservi)", re.IGNORECASE),
+    re.compile(r"(Resumo|Parcelas\s*futuras|Comprasparceladas)", re.IGNORECASE),
+    re.compile(r"(Para\s*sua\s*seguran|Dicas\s*de\s*seguran)", re.IGNORECASE),
+    re.compile(r"(www\.|itau\.com|Resumodafatura|Totaldafatura|Saldofinanciado)", re.IGNORECASE),
+    re.compile(r"(Lan[cç]amentos\s*:?\s*compras|Lan[cç]amentos\s*:?\s*produtos)", re.IGNORECASE),
+    re.compile(r"(Totaldeoutros|Totaldoslança|Fiqueatentoaos|Novotetodejuros)", re.IGNORECASE),
+    re.compile(r"(SimulaçãodeCompras|SimulaçãoSaque|Próximafatura|Demaisfaturas)", re.IGNORECASE),
+    re.compile(r"(ALIMENTAÇÃO|VEÍCULOS|DIVERSOS|SAÚDE|MORADIA|EDUCAÇÃO|VESTUÁRIO|TURISMO|HOBBY)", re.IGNORECASE),
+    re.compile(r"(Lan[cç]amentos\s*no\s*cart|Lan[cç]amentos\s*internacionais)", re.IGNORECASE),
+    re.compile(r"(Valorcompra|ValordoIOF|Valortotalfinanciado|Valorjuros|Valordaparcela)", re.IGNORECASE),
 ]
 
 
@@ -141,8 +150,12 @@ class ParserItau(BaseParser):
         total_amount = self._extract_total(all_text)
         card_digits = self._extract_main_card(all_text)
 
-        # 3. Extrair transações
+        # 3. Extrair transações (using dual-column aware parser)
         transactions = self._extract_transactions(all_text, ref_month)
+
+        # 4. If total is 0, compute from transactions
+        if not total_amount or total_amount == Decimal("0"):
+            total_amount = sum(t.amount for t in transactions if t.amount > 0)
 
         logger.info(
             f"Itaú parsed: {len(transactions)} transações, "
@@ -189,13 +202,21 @@ class ParserItau(BaseParser):
         if match:
             full_match = match.group(0)
             year = match.group(1)
-
-            # Extrair nome do mês
             month_text = re.split(r"[/\s.]", full_match)[0].strip().lower()
             month_num = MONTH_MAP.get(month_text)
-
             if month_num and year:
                 return f"{year}-{month_num}"
+
+        # Fallback: use due_date (Vencimento:09/04/2026 → 2026-04)
+        due = RE_DUE_DATE.search(text)
+        if due:
+            parts = due.group(1).split('/')
+            return f"{parts[2]}-{parts[1]}"
+
+        # Fallback: use Fechamento date
+        fech = RE_FECHAMENTO.search(text)
+        if fech:
+            return f"{fech.group(3)}-{fech.group(2)}"
 
         return None
 
@@ -204,10 +225,19 @@ class ParserItau(BaseParser):
         match = RE_TOTAL.search(text)
         if match:
             return self._parse_brl_amount(match.group(1))
+        # Fallback: "Totaldoslançamentosatuais 10.962,06"
+        fallback = re.search(r"Totaldoslan[cç]amentos\w*\s+([\d.]+,\d{2})", text)
+        if fallback:
+            return self._parse_brl_amount(fallback.group(1))
         return None
 
     def _extract_main_card(self, text: str) -> Optional[str]:
-        """Extrair últimos 4 dígitos do cartão principal (primeiro encontrado)"""
+        """Extrair últimos 4 dígitos do cartão principal"""
+        # Try masked format first: "Cartão 5122.XXXX.XXXX.8001"
+        masked = RE_CARD_MASKED.search(text)
+        if masked:
+            return masked.group(1)
+        # Try "Cartão final 8001"
         match = RE_CARD_SECTION.search(text)
         if match:
             return match.group(1)
@@ -219,21 +249,19 @@ class ParserItau(BaseParser):
         self, text: str, ref_month: Optional[str]
     ) -> List[ParsedTransaction]:
         """
-        Parsing linha-a-linha das transações Itaú.
+        Parsing for Itaú PDFs with dual-column layout.
 
-        Estratégia:
-        1. Detectar seções por cartão ("Cartão final XXXX - NOME")
-        2. Para cada linha, tentar extrair: data (DD/MM) + descrição + valor
-        3. Inferir ano da data pelo mês de referência
-        4. Detectar seção de internacionais para marcar is_international
+        The PDF has 2 columns of transactions side by side. pdfplumber merges them
+        into one line like:
+          "07/03 NOELIARIOMAR 7,90 14/03 POSTOVPL3 200,00"
+
+        Strategy: find ALL DD/MM + description + amount patterns in each line.
         """
         transactions = []
         current_card = None
-        current_member_name = None
         is_international_section = False
         lines = text.split("\n")
 
-        # Inferir ano e mês do mês de referência
         if ref_month:
             ref_year = int(ref_month.split("-")[0])
             ref_month_num = int(ref_month.split("-")[1])
@@ -241,56 +269,85 @@ class ParserItau(BaseParser):
             ref_year = datetime.now().year
             ref_month_num = datetime.now().month
 
+        # Regex for a single transaction chunk: DD/MM description amount
+        # Handles optional installment XX/YY between description and amount
+        RE_TX_CHUNK = re.compile(
+            r"(\d{2}/\d{2})\s+"            # date DD/MM
+            r"(.+?)\s+"                     # description (non-greedy)
+            r"(-?[\d.]+,\d{2})"             # amount
+        )
+
         for line in lines:
             line = line.strip()
-
-            # Pular linhas inúteis
             if self._should_skip_line(line):
                 continue
 
-            # Detectar seção de internacionais
-            if re.search(r"Lan[cç]amentos\s+Internacionais", line, re.IGNORECASE):
-                is_international_section = True
+            # Detect card section
+            card_masked = RE_CARD_MASKED.search(line)
+            if card_masked:
+                current_card = card_masked.group(1)
                 continue
-
-            if re.search(r"Lan[cç]amentos\s+Nacionais", line, re.IGNORECASE):
-                is_international_section = False
-                continue
-
-            # Detectar seção de cartão com nome do titular
             card_match = RE_CARD_SECTION.search(line)
             if card_match:
                 current_card = card_match.group(1)
-                current_member_name = card_match.group(2)  # pode ser None
                 continue
 
-            # IOF isolado — pular (IOF já é tratado na transação internacional)
-            if re.match(r"^\s*IOF\s", line, re.IGNORECASE):
-                # Extrair IOF e aplicar à última transação internacional
-                if transactions and transactions[-1].is_international:
-                    iof_match = RE_IOF.search(line)
-                    if iof_match:
-                        iof_amount = self._parse_brl_amount(iof_match.group(1))
-                        if iof_amount:
-                            transactions[-1] = ParsedTransaction(
-                                date=transactions[-1].date,
-                                description=transactions[-1].description,
-                                raw_description=transactions[-1].raw_description,
-                                amount=transactions[-1].amount,
-                                installment_num=transactions[-1].installment_num,
-                                installment_total=transactions[-1].installment_total,
-                                is_international=True,
-                                iof_amount=iof_amount,
-                                card_last_digits=transactions[-1].card_last_digits,
-                            )
+            # Detect international section
+            if re.search(r"internacionais", line, re.IGNORECASE):
+                is_international_section = True
                 continue
 
-            # Tentar parsear como transação
-            transaction = self._parse_transaction_line(
-                line, current_card, ref_year, ref_month_num, is_international_section
-            )
-            if transaction:
-                transactions.append(transaction)
+            # Find all transaction chunks in the line
+            matches = list(RE_TX_CHUNK.finditer(line))
+            for m in matches:
+                date_str = m.group(1)
+                raw_desc = m.group(2).strip()
+                amount_str = m.group(3)
+
+                if not raw_desc or len(raw_desc) < 3:
+                    continue
+
+                # Parse date
+                try:
+                    tx_day = int(date_str.split("/")[0])
+                    tx_month = int(date_str.split("/")[1])
+                    tx_year = self._infer_year(tx_month, ref_month_num, ref_year)
+                    tx_date = date(tx_year, tx_month, tx_day)
+                except (ValueError, IndexError):
+                    continue
+
+                # Parse amount
+                amount = self._parse_brl_amount(amount_str)
+                if amount is None:
+                    continue
+
+                # Extract installments from description
+                installment_num = None
+                installment_total = None
+                desc_clean = raw_desc
+                inst_match = RE_INSTALLMENT.search(raw_desc)
+                if inst_match:
+                    num = int(inst_match.group(1))
+                    total = int(inst_match.group(2))
+                    if 1 <= num <= total <= 99 and total > 1:
+                        installment_num = num
+                        installment_total = total
+                        desc_clean = RE_INSTALLMENT.sub("", raw_desc).strip()
+
+                # Detect estorno
+                if RE_ESTORNO.search(raw_desc):
+                    amount = -abs(amount)
+
+                transactions.append(ParsedTransaction(
+                    date=tx_date,
+                    description=desc_clean,
+                    raw_description=raw_desc,
+                    amount=amount,
+                    installment_num=installment_num,
+                    installment_total=installment_total,
+                    is_international=is_international_section,
+                    card_last_digits=current_card,
+                ))
 
         return transactions
 
