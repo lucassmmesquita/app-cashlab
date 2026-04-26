@@ -2,13 +2,13 @@
 
 Extrai transações de faturas do Banco BV em PDF usando pdfplumber.
 
-Estrutura do PDF BV:
-- Cabeçalho: "Fatura do Cartão" + últimos dígitos + mês referência + vencimento
-- Seção "Lançamentos Nacionais": Data | Descrição | Valor (R$)
-- Parcelas: "DESCRIÇÃO (X/Y)"
-- Separadores de cartão: "Cartão final XXXX"
-- Datas no formato DD/MM/YYYY
-- Valores no formato 1.234,56
+Estrutura do PDF BV (novo formato 2026):
+- Cabeçalho: "Esta é a sua fatura de {Mês}" + "no valor de R$ X.XXX,XX"
+- "Cartão BV Platinum - Master: 5213 **** **** 3776"
+- Seção "Lançamentos nacionais": Data | Descrição | Localização | Valor em R$
+- Datas no formato DD/MM (sem ano!) — ano inferido do vencimento
+- Parcelas: "DESCRIÇÃO XX/YY" (sem parênteses)
+- Separador: "NOME DO TITULAR" seguido de "Cartão 5213 **** **** XXXX"
 
 Referência: docs/APP_FINANCAS_ESPECIFICACOES.md → §4.2.1
 """
@@ -25,31 +25,36 @@ from .base import BaseParser, ParsedInvoice, ParsedTransaction
 logger = logging.getLogger(__name__)
 
 
-# ── Regex patterns extraídos da especificação ────────────────────────
+# ── Regex patterns ────────────────────────────────────────────────
 
-# Data no formato BV: DD/MM/YYYY
-RE_DATE = re.compile(r"(\d{2}/\d{2}/\d{4})")
+# Data curta: DD/MM (sem ano) — formato real do BV
+RE_DATE_SHORT = re.compile(r"^(\d{2}/\d{2})\b")
 
-# Valor monetário: "1.234,56" ou "123,45" (com ou sem R$)
-RE_AMOUNT = re.compile(r"R?\$?\s*([\d.]+,\d{2})")
+# Data longa: DD/MM/YYYY (para vencimento)
+RE_DATE_LONG = re.compile(r"(\d{2}/\d{2}/\d{4})")
 
-# Parcela: (X/Y)
-RE_INSTALLMENT = re.compile(r"\((\d+)/(\d+)\)")
+# Valor monetário: "R$ 36,89" ou "36,89" ou "1.234,56"
+RE_AMOUNT = re.compile(r"R?\$?\s*([\d.]+,\d{2})\s*$")
 
-# Seção por cartão: "Cartão final 6740"
-RE_CARD_SECTION = re.compile(r"Cart[aã]o\s+final\s+(\d{4})", re.IGNORECASE)
+# Parcela: "03/05" ou "05/10" no meio da descrição (entre espaços)
+# NB: Cuidado para não confundir com datas DD/MM
+RE_INSTALLMENT = re.compile(r"\b(\d{2})/(\d{2})\s*$")
 
-# Total da fatura
-RE_TOTAL = re.compile(r"Total\s+da\s+fatura.*?([\d.]+,\d{2})", re.IGNORECASE)
+# Cartão completo: "Cartão BV ... : 5213 **** **** 3776" ou "Cartão 5213 **** **** 9348"
+RE_CARD_FULL = re.compile(r"Cart[aã]o.*?(\d{4})\s*$", re.IGNORECASE)
 
-# Vencimento
-RE_DUE_DATE = re.compile(r"Vencimento.*?(\d{2}/\d{2}/\d{4})", re.IGNORECASE)
+# Cartão na seção de titular: "Cartão 5213 **** **** XXXX"
+RE_CARD_SECTION = re.compile(r"Cart[aã]o\s+\d{4}\s+\*{4}\s+\*{4}\s+(\d{4})", re.IGNORECASE)
 
-# Mês de referência: "Abril/2026", "MAR/2026", etc.
+# Total da fatura: "no valor de R$ 13.705,53" ou "Total desta fatura R$ 13.705,53"
+RE_TOTAL = re.compile(r"(?:no\s+valor\s+de|Total\s+desta\s+fatura)\s+R\$\s*([\d.]+,\d{2})", re.IGNORECASE)
+
+# Vencimento: "Vencimento: 22/04/2026" ou "Data de Vencimento 22/04/2026"
+RE_DUE_DATE = re.compile(r"[Vv]encimento[:\s]+(\d{2}/\d{2}/\d{4})")
+
+# Mês de referência: "fatura de Abril" ou "fatura de março"
 RE_REF_MONTH = re.compile(
-    r"(?:Janeiro|Fevereiro|Mar[cç]o|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro"
-    r"|JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)"
-    r"\s*/?\s*(\d{4})",
+    r"fatura\s+de\s+(Janeiro|Fevereiro|Mar[cç]o|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro)",
     re.IGNORECASE,
 )
 
@@ -59,48 +64,45 @@ MONTH_MAP = {
     "abril": "04", "maio": "05", "junho": "06",
     "julho": "07", "agosto": "08", "setembro": "09",
     "outubro": "10", "novembro": "11", "dezembro": "12",
-    "jan": "01", "fev": "02", "mar": "03", "abr": "04",
-    "mai": "05", "jun": "06", "jul": "07", "ago": "08",
-    "set": "09", "out": "10", "nov": "11", "dez": "12",
 }
 
-# Linhas a ignorar durante parsing de transações
+# Total de lançamentos nacionais (para ignorar como transação)
+RE_TOTAL_SECTION = re.compile(r"^Total\s+l", re.IGNORECASE)
+
+# Linhas a ignorar
 SKIP_PATTERNS = [
     re.compile(r"^\s*$"),
-    re.compile(r"^(TOTAL|Total\s+da\s+fatura|Pagamento\s+m[ií]nimo)", re.IGNORECASE),
-    re.compile(r"^(Limite|Cr[eé]dito\s+dispon[ií]vel|Encargos)", re.IGNORECASE),
-    re.compile(r"^(SAC|Central\s+de\s+Atendimento|Ouvidoria)", re.IGNORECASE),
-    re.compile(r"^(P[aá]gina\s+\d)", re.IGNORECASE),
-    re.compile(r"^(Lan[cç]amentos\s+Nacionais|Lan[cç]amentos\s+Internacionais)", re.IGNORECASE),
-    re.compile(r"^(Data\s+Descri)", re.IGNORECASE),  # header da tabela
+    re.compile(r"^Total\s+l", re.IGNORECASE),  # "Total lançamentos nacionais"
+    re.compile(r"^Total\s+d", re.IGNORECASE),  # "Total desta fatura"
+    re.compile(r"^Pagamento\s+(efetuado|m[ií]nimo)", re.IGNORECASE),
+    re.compile(r"^Data\s+Descri", re.IGNORECASE),  # Header da tabela
+    re.compile(r"^(Limite|Cr[eé]dito|Encargos|SAC|Ouvidoria|Central)", re.IGNORECASE),
+    re.compile(r"^\d+/\d+\s+\d+\s+\d+$"),  # Numeração de página "4/9 001 00001"
+    re.compile(r"^(Pagamentos|Ajustes)$", re.IGNORECASE),
+    re.compile(r"^Op[cç][oõ]es\s+de\s+pagamento", re.IGNORECASE),
+    re.compile(r"^Pagamento\s+(total|parcelado)", re.IGNORECASE),
+    re.compile(r"^(Sempre|Pague\s+o\s+Valor|Valores\s+n|N[aã]o\s+consegue)", re.IGNORECASE),
+    re.compile(r"^(Parcele\s+em|Entrada\s+R|Parcelas\s+\d|Total\s+a\s+pagar)", re.IGNORECASE),
+    re.compile(r"^Informa[cç][oõ]es", re.IGNORECASE),
+    re.compile(r"^(Taxas|Produtos|Parcelamento|Rotativo|Empréstimo|Crediário|Pagamento\s+de\s+contas)", re.IGNORECASE),
+    re.compile(r"^(IOF|Multa|Retirada|CET)", re.IGNORECASE),
+    re.compile(r"^(As\s+taxas|Essa\s+fatura)", re.IGNORECASE),
+    re.compile(r"^(Resumo\s+das\s+Transa|Saldo\s+anterior)", re.IGNORECASE),
+    re.compile(r"^(Total\s+da\s+fatura\s+anterior|Compras,\s+retirada)", re.IGNORECASE),
+    re.compile(r"^(Detalhamento|Cartão\s+BV\s+Platinum)", re.IGNORECASE),
 ]
-
-# Mapeamento cartão → membro (configurável)
-CARD_MEMBER_MAP = {
-    "6740": "LUCAS",
-}
-
-# Regras de membro por descrição
-MEMBER_RULES = {
-    "J PESSOA": "JURA",
-    "PAGUE MENOS": "JURA",
-    "EXTRA FARMA": "JURA",
-    "BM SERVIÇOS": "JURA",
-    "BM SERVICOS": "JURA",
-    "COMETA": "JURA",
-}
 
 
 class ParserBV(BaseParser):
     """
-    Parser para faturas do Banco BV.
+    Parser para faturas do Banco BV (formato 2026).
 
     Fluxo:
     1. Extrai todo o texto das páginas com pdfplumber
     2. Identifica metadados (vencimento, mês ref, total)
-    3. Identifica seções por cartão ("Cartão final XXXX")
+    3. Identifica seções por cartão ("Cartão 5213 **** **** XXXX")
     4. Faz parsing linha-a-linha das transações
-    5. Extrai parcelas (X/Y) das descrições
+    5. Extrai parcelas (XX/YY) das descrições
     """
 
     def detect(self, file_path: str) -> bool:
@@ -122,6 +124,8 @@ class ParserBV(BaseParser):
                         return True
                     if "bv financeira" in text_lower:
                         return True
+                    if "cartão bv" in text_lower:
+                        return True
 
             return False
         except Exception:
@@ -136,12 +140,23 @@ class ParserBV(BaseParser):
 
         # 2. Extrair metadados do cabeçalho
         due_date = self._extract_due_date(all_text)
-        ref_month = self._extract_reference_month(all_text)
+        ref_month = self._extract_reference_month(all_text, due_date)
         total_amount = self._extract_total(all_text)
         card_digits = self._extract_main_card(all_text)
 
+        # Armazenar para uso na inferência de ano
+        self._ref_month = ref_month
+
+        # Inferir ano de referência
+        if ref_month:
+            ref_year = int(ref_month.split("-")[0])
+        elif due_date:
+            ref_year = due_date.year
+        else:
+            ref_year = datetime.now().year
+
         # 3. Extrair transações
-        transactions = self._extract_transactions(all_text, ref_month)
+        transactions = self._extract_transactions(all_text, ref_year)
 
         logger.info(
             f"BV parsed: {len(transactions)} transações, "
@@ -182,19 +197,29 @@ class ParserBV(BaseParser):
                 pass
         return None
 
-    def _extract_reference_month(self, text: str) -> Optional[str]:
-        """Extrair mês de referência no formato '2026-04'"""
+    def _extract_reference_month(self, text: str, due_date: Optional[date] = None) -> Optional[str]:
+        """
+        Extrair mês de referência no formato '2026-04'.
+        
+        O BV usa "Esta é a sua fatura de Abril" sem indicar o ano.
+        O ano é inferido da data de vencimento.
+        """
         match = RE_REF_MONTH.search(text)
         if match:
-            full_match = match.group(0)
-            year = match.group(1)
-
-            # Extrair nome do mês do match
-            month_text = full_match.split("/")[0].split()[0].strip().lower()
-            month_num = MONTH_MAP.get(month_text)
-
-            if month_num and year:
+            month_name = match.group(1).lower()
+            month_num = MONTH_MAP.get(month_name)
+            
+            if month_num:
+                # Inferir ano da data de vencimento
+                if due_date:
+                    year = due_date.year
+                else:
+                    year = datetime.now().year
                 return f"{year}-{month_num}"
+
+        # Fallback: usar mês do vencimento
+        if due_date:
+            return f"{due_date.year}-{due_date.month:02d}"
 
         return None
 
@@ -206,7 +231,10 @@ class ParserBV(BaseParser):
         return None
 
     def _extract_main_card(self, text: str) -> Optional[str]:
-        """Extrair últimos 4 dígitos do cartão principal"""
+        """
+        Extrair últimos 4 dígitos do cartão principal.
+        Formato BV: "Cartão BV Platinum - Master: 5213 **** **** 3776"
+        """
         match = RE_CARD_SECTION.search(text)
         if match:
             return match.group(1)
@@ -215,23 +243,25 @@ class ParserBV(BaseParser):
     # ── Transações ─────────────────────────────────────────────────
 
     def _extract_transactions(
-        self, text: str, ref_month: Optional[str]
+        self, text: str, ref_year: int
     ) -> List[ParsedTransaction]:
         """
         Parsing linha-a-linha das transações.
 
+        Formato real do BV:
+        "22/03 IFD*LOVE YOU BURGUER L FORTALEZA R$ 36,89"
+        "06/12 SHEIN *SHEIN.COM 05/05 Vila Olimpia R$ 12,25"
+        
         Estratégia:
-        1. Identificar a seção de lançamentos
-        2. Para cada linha, tentar extrair: data + descrição + valor
-        3. Linhas sem data → continuação da descrição anterior
-        4. Detectar seção do cartão para atribuir card_last_digits
+        1. Linhas que iniciam com DD/MM são candidatas a transações
+        2. O último R$ X.XXX,XX da linha é o valor
+        3. A descrição é o que sobra entre a data e o valor
+        4. Parcelas aparecem como XX/YY no meio (ex: "05/05")
+        5. Detectar seção do cartão para atribuir card_last_digits
         """
         transactions = []
         current_card = None
         lines = text.split("\n")
-
-        # Ano padrão do mês de referência
-        ref_year = int(ref_month.split("-")[0]) if ref_month else datetime.now().year
 
         in_transactions_section = False
 
@@ -243,19 +273,24 @@ class ParserBV(BaseParser):
                 continue
 
             # Detectar início da seção de lançamentos
-            if re.search(r"Lan[cç]amentos\s+(Nacionais|Internacionais)", line, re.IGNORECASE):
+            if re.search(r"Lan[cç]amentos\s+nacionais", line, re.IGNORECASE):
                 in_transactions_section = True
                 continue
 
-            # Detectar fim da seção (Resumo, Pagamento Mínimo, etc.)
-            if re.search(r"(Resumo\s+de\s+parcelas|Pagamento\s+m[ií]nimo|Total\s+da\s+fatura)", line, re.IGNORECASE):
-                # Não para — pode ter mais transações em outra seção
-                pass
+            # Detectar seção de pagamentos (ignorar)
+            if re.search(r"^Pagamentos$", line, re.IGNORECASE):
+                in_transactions_section = False
+                continue
 
-            # Detectar seção de cartão
+            # Detectar seção de cartão: "Cartão 5213 **** **** 9348"
             card_match = RE_CARD_SECTION.search(line)
             if card_match:
                 current_card = card_match.group(1)
+                in_transactions_section = False  # Reset — espera "Lançamentos" novamente
+                continue
+
+            # Se não estamos na seção de transações, pular
+            if not in_transactions_section:
                 continue
 
             # Tentar parsear como transação
@@ -269,67 +304,104 @@ class ParserBV(BaseParser):
         self, line: str, current_card: Optional[str], ref_year: int
     ) -> Optional[ParsedTransaction]:
         """
-        Tentar parsear uma linha como transação.
+        Parsear uma linha de transação do BV.
 
-        Formato esperado: "DD/MM/YYYY  DESCRIÇÃO DO LANÇAMENTO  1.234,56"
-        Variações:
-        - "DD/MM/YYYY  DESCRIÇÃO (3/10)  1.234,56"
-        - "DD/MM/YYYY  DESCRIÇÃO  -1.234,56" (crédito)
+        Formato: "22/03 IFD*LOVE YOU BURGUER L FORTALEZA R$ 36,89"
+        Com parcela: "06/12 SHEIN *SHEIN.COM 05/05 Vila Olimpia R$ 12,25"
+        Pagamento: "23/03 PAGAMENTO EFETUADO (-) R$ 10.429,92"
         """
-        # Precisa ter uma data no início
-        date_match = RE_DATE.search(line)
+        # Precisa iniciar com DD/MM
+        date_match = RE_DATE_SHORT.match(line)
         if not date_match:
             return None
 
-        # Precisa ter um valor no final
-        # Pegar o ÚLTIMO valor da linha (o mais à direita)
-        amount_matches = list(RE_AMOUNT.finditer(line))
-        if not amount_matches:
+        # Precisa ter um valor no final: R$ XX,XX
+        amount_match = RE_AMOUNT.search(line)
+        if not amount_match:
             return None
 
-        last_amount_match = amount_matches[-1]
+        # Ignorar linhas de pagamento
+        if "PAGAMENTO EFETUADO" in line.upper():
+            return None
 
-        # Extrair a data
+        # Extrair data
+        date_str = date_match.group(1)
         try:
-            tx_date = datetime.strptime(date_match.group(1), "%d/%m/%Y").date()
-        except ValueError:
+            day, month = date_str.split("/")
+            tx_month = int(month)
+            tx_day = int(day)
+            
+            # Inferir o ano: o BV não inclui o ano na data da transação.
+            # Regra: se o mês da transação é muito posterior ao mês de referência
+            # da fatura, provavelmente é do ano anterior (parcela antiga).
+            # Ex: fatura abril/2026, transação em 28/06 → junho/2025 (parcela 10/10)
+            # Ex: fatura abril/2026, transação em 06/12 → dezembro/2025 (parcela 5/5)
+            # Ex: fatura abril/2026, transação em 22/03 → março/2026 (compra recente)
+            tx_year = ref_year
+            
+            # Extrair mês de referência da fatura para comparação
+            ref_month_num = 4  # fallback
+            try:
+                ref_month_num = int(self._ref_month.split("-")[1]) if hasattr(self, '_ref_month') and self._ref_month else ref_month_num
+            except (ValueError, IndexError):
+                pass
+            
+            # Se o mês da transação é > mês de referência da fatura + 1,
+            # significa que é do ano anterior
+            # (transação em junho para fatura de abril → ano anterior)
+            if tx_month > ref_month_num + 1:
+                tx_year = ref_year - 1
+
+            tx_date = date(tx_year, tx_month, tx_day)
+        except (ValueError, IndexError):
             return None
 
-        # Extrair o valor
-        amount = self._parse_brl_amount(last_amount_match.group(1))
-        if amount is None:
+        # Extrair valor
+        amount = self._parse_brl_amount(amount_match.group(1))
+        if amount is None or amount <= 0:
             return None
 
-        # Extrair a descrição (entre a data e o valor)
+        # Verificar se é crédito/ajuste (contém (-) antes do valor)
+        if "(-)" in line:
+            return None  # Ignorar ajustes/créditos
+
+        # Extrair descrição (entre data e valor)
         desc_start = date_match.end()
-        desc_end = last_amount_match.start()
+        desc_end = amount_match.start()
         raw_description = line[desc_start:desc_end].strip()
 
         if not raw_description:
             return None
 
-        # Limpar descrição — remover caracteres estranhos
+        # Limpar descrição
         description = re.sub(r"\s+", " ", raw_description).strip()
 
-        # Extrair parcelas da descrição
+        # Extrair parcelas do BV: "DESCRIÇÃO XX/YY LOCALIZAÇÃO"
+        # Parcelas aparecem como "05/05" no meio da descrição
         installment_num = None
         installment_total = None
-        inst_match = RE_INSTALLMENT.search(description)
-        if inst_match:
-            installment_num = int(inst_match.group(1))
-            installment_total = int(inst_match.group(2))
-            # Limpar parcela da descrição para ter a descrição limpa
-            description_clean = RE_INSTALLMENT.sub("", description).strip()
-        else:
-            description_clean = description
 
-        # Verificar se é crédito (valor negativo)
-        if "-" in line[desc_end:last_amount_match.start() + 1]:
-            amount = -amount
+        # Procurar padrão de parcela na descrição
+        inst_match = re.search(r"\b(\d{2})/(\d{2})\b", description)
+        if inst_match:
+            num = int(inst_match.group(1))
+            total = int(inst_match.group(2))
+            # Distinguir parcela de data: parcelas têm total > 1 e num <= total
+            if total > 1 and num <= total and total <= 36:
+                installment_num = num
+                installment_total = total
+                # Remover parcela da descrição
+                description = description[:inst_match.start()].strip()
+                # Remover localização após a parcela
+                location_after = raw_description[inst_match.end():].strip()
+                # A localização é o que sobra após a parcela e antes do R$
+
+        # Remover "R$" solto no final da descrição
+        description = re.sub(r"\s*R\$\s*$", "", description).strip()
 
         return ParsedTransaction(
             date=tx_date,
-            description=description_clean,
+            description=description,
             raw_description=raw_description,
             amount=amount,
             installment_num=installment_num,
