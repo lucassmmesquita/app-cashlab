@@ -272,24 +272,83 @@ export default function CashFlowScreen() {
             <Text style={[styles.resultNote, { color: colors.secondaryLabel }]}>{pctCompromised}% da receita comprometida</Text>
           </View>
 
-          {/* Summary bars */}
+          {/* Budget Progress Bar — Barra de Progresso Segmentada */}
           <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
-            <View style={styles.summaryRow}>
-              <View style={styles.summaryItem}>
-                <Text style={[styles.sumLabel, { color: colors.tertiaryLabel }]}>Receitas</Text>
-                <Text style={[styles.sumValue, { color: colors.green }]}>{formatCurrency(totalIncome)}</Text>
+            <View style={{ padding: 16 }}>
+              <Text style={[styles.sumLabel, { color: colors.tertiaryLabel, marginBottom: 8 }]}>COMPOSIÇÃO DO MÊS</Text>
+              {/* Segmented bar */}
+              <View style={[styles.progressBg, { backgroundColor: colors.segmentBg, marginHorizontal: 0, marginBottom: 0, height: 14, borderRadius: 7, overflow: 'hidden', flexDirection: 'row' }]}>
+                {/* Despesas Fixas — Azul */}
+                {totalIncome > 0 && (
+                  <View style={{
+                    width: `${Math.min((totalFixed / totalIncome) * 100, 100)}%`,
+                    backgroundColor: colors.blue,
+                    height: 14,
+                  }} />
+                )}
+                {/* Cartão — Amarelo→Vermelho */}
+                {totalIncome > 0 && totalCards > 0 && (
+                  <View style={{
+                    width: `${Math.min((totalCards / totalIncome) * 100, 100 - Math.min((totalFixed / totalIncome) * 100, 100))}%`,
+                    backgroundColor: (totalFixed + totalCards) > totalIncome ? colors.red : '#F5A623',
+                    height: 14,
+                  }} />
+                )}
+                {/* Saldo Livre — Verde (se houver) */}
+                {!isDeficit && totalIncome > 0 && (
+                  <View style={{
+                    flex: 1,
+                    backgroundColor: `${colors.green}40`,
+                    height: 14,
+                  }} />
+                )}
               </View>
-              <View style={[styles.sumDivider, { backgroundColor: colors.separator }]} />
-              <View style={styles.summaryItem}>
-                <Text style={[styles.sumLabel, { color: colors.tertiaryLabel }]}>Saídas</Text>
-                <Text style={[styles.sumValue, { color: colors.red }]}>{formatCurrency(totalExpenses)}</Text>
-              </View>
+              {/* Excedente vermelho pulsante */}
+              {isDeficit && totalIncome > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.red, marginRight: 6 }} />
+                  <Text style={{ color: colors.red, fontSize: 12, fontWeight: '700' }}>
+                    Excedente: {(((totalExpenses / totalIncome) * 100) - 100).toFixed(1)}% acima da receita
+                  </Text>
+                </View>
+              )}
             </View>
-            <View style={[styles.progressBg, { backgroundColor: colors.segmentBg }]}>
-              <View style={[styles.progressFill, {
-                backgroundColor: isDeficit ? colors.red : colors.green,
-                width: `${Math.min((totalExpenses / totalIncome) * 100, 100)}%`,
-              }]} />
+
+            {/* Legenda / detalhamento */}
+            <View style={[{ borderTopWidth: 0.5, borderTopColor: colors.separator }]}>
+              <View style={[styles.summaryRow, { paddingBottom: 4 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.green, marginRight: 8 }} />
+                  <Text style={[styles.sumLabel, { color: colors.tertiaryLabel }]}>Receita Total</Text>
+                </View>
+                <Text style={[styles.sumValue, { color: colors.green, fontSize: 16 }]}>{formatCurrency(totalIncome)}</Text>
+              </View>
+              <View style={[styles.summaryRow, { paddingTop: 2, paddingBottom: 4 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.blue, marginRight: 8 }} />
+                  <Text style={[styles.sumLabel, { color: colors.tertiaryLabel }]}>Despesas Fixas</Text>
+                </View>
+                <Text style={[styles.sumValue, { color: colors.label, fontSize: 16 }]}>
+                  {formatCurrency(totalFixed)} ({totalIncome > 0 ? ((totalFixed / totalIncome) * 100).toFixed(0) : 0}%)
+                </Text>
+              </View>
+              <View style={[styles.summaryRow, { paddingTop: 2, paddingBottom: 4 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: (totalFixed + totalCards) > totalIncome ? colors.red : '#F5A623', marginRight: 8 }} />
+                  <Text style={[styles.sumLabel, { color: colors.tertiaryLabel }]}>Cartão de Crédito</Text>
+                </View>
+                <Text style={[styles.sumValue, { color: colors.label, fontSize: 16 }]}>
+                  {formatCurrency(totalCards)} ({totalIncome > 0 ? ((totalCards / totalIncome) * 100).toFixed(0) : 0}%)
+                </Text>
+              </View>
+              <View style={[styles.summaryRow, { paddingTop: 2, paddingBottom: 12, borderTopWidth: 0.5, borderTopColor: colors.separator }]}>
+                <Text style={[styles.totalLabel, { color: isDeficit ? colors.red : colors.green }]}>
+                  {isDeficit ? 'DÉFICIT' : 'SALDO DISPONÍVEL'}
+                </Text>
+                <Text style={[styles.totalValue, { color: isDeficit ? colors.red : colors.green }]}>
+                  {formatCurrency(balance)}
+                </Text>
+              </View>
             </View>
           </View>
 

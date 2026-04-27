@@ -65,6 +65,15 @@ async def auto_migrate():
         "CREATE INDEX IF NOT EXISTS idx_goal_snapshots_goal ON goal_snapshots(goal_id)",
         "UPDATE incomes SET effective_from = '2026-03' WHERE effective_from IS NULL",
         "UPDATE fixed_expenses SET effective_from = '2026-03' WHERE effective_from IS NULL",
+        # v2.0 — Parser training lifecycle
+        "ALTER TABLE banks ADD COLUMN IF NOT EXISTS parser_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+        "ALTER TABLE banks ADD COLUMN IF NOT EXISTS parser_trained_at TIMESTAMP WITH TIME ZONE DEFAULT NULL",
+        "UPDATE banks SET parser_status = 'ready' WHERE has_native_parser = true AND parser_status = 'pending'",
+        # v2.0 — Competência vs Pagamento
+        "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payment_month VARCHAR(7) DEFAULT NULL",
+        "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS competence_month VARCHAR(7) DEFAULT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_invoices_payment_month ON invoices(payment_month)",
+        "CREATE INDEX IF NOT EXISTS idx_invoices_competence_month ON invoices(competence_month)",
     ]
 
     for sql in migrations:

@@ -19,6 +19,8 @@ export interface UploadPreview {
   file_id: string;
   bank: string;
   reference_month: string;
+  payment_month: string;
+  competence_month: string;
   due_date: string | null;
   total_amount: string;
   card_last_digits: string;
@@ -29,6 +31,8 @@ export interface UploadPreview {
 export interface InvoiceListItem {
   id: number;
   reference_month: string;
+  payment_month: string | null;
+  competence_month: string | null;
   due_date: string | null;
   total_amount: string;
   status: string;

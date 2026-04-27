@@ -6,7 +6,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator,
-  Alert, Modal, TextInput, RefreshControl,
+  Alert, Modal, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
@@ -21,7 +21,7 @@ import { formatCurrency, formatDate } from '@/utils/formatters';
 
 type Step = 'idle' | 'uploading' | 'preview' | 'confirming' | 'done';
 
-const BANK_COLOR_OPTIONS = ['#F5A623','#FF6B00','#8A05BE','#007AFF','#34C759','#E63946','#2D3436','#00B894'];
+
 
 export default function ImportScreen() {
   const { colors, radius, spacing } = useAppTheme();
@@ -51,13 +51,7 @@ export default function ImportScreen() {
   const [detailData, setDetailData] = useState<InvoiceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Add bank modal
-  const [bankModal, setBankModal] = useState(false);
-  const [newBankName, setNewBankName] = useState('');
-  const [newBankColor, setNewBankColor] = useState('#007AFF');
-  const [newClosingDay, setNewClosingDay] = useState('');
-  const [newDueDay, setNewDueDay] = useState('');
-  const [bankSaving, setBankSaving] = useState(false);
+
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -166,34 +160,7 @@ export default function ImportScreen() {
     ]);
   };
 
-  // ── Bank CRUD ──
-  const handleCreateBank = async () => {
-    if (!newBankName.trim()) return;
-    setBankSaving(true);
-    try {
-      const cd = newClosingDay ? parseInt(newClosingDay) : undefined;
-      const dd = newDueDay ? parseInt(newDueDay) : undefined;
-      await bankService.create(newBankName.trim(), newBankColor, cd, dd);
-      setBankModal(false);
-      setNewBankName('');
-      setNewClosingDay('');
-      setNewDueDay('');
-      fetchData();
-    } catch (err: any) {
-      Alert.alert('Erro', err.response?.data?.detail || 'Erro ao criar banco');
-    } finally { setBankSaving(false); }
-  };
 
-  const handleDeleteBank = (id: number, name: string) => {
-    Alert.alert('Excluir Banco', `Remover "${name}"?`, [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Excluir', style: 'destructive', onPress: async () => {
-        try { await bankService.remove(id); fetchData(); } catch (err: any) {
-          Alert.alert('Erro', err.response?.data?.detail || 'Não foi possível excluir');
-        }
-      }},
-    ]);
-  };
 
   const bankLabel = (b: string) => ({ bv: 'Banco BV', itau: 'Itaú', nubank: 'Nubank' }[b] || b);
   const fmtSize = (b: number | null) => b ? (b > 1024*1024 ? `${(b/1024/1024).toFixed(1)} MB` : `${Math.round(b/1024)} KB`) : '';
@@ -334,45 +301,7 @@ export default function ImportScreen() {
             </>
           )}
 
-          {/* ── BANCOS ── */}
-          {step === 'idle' && (
-            <>
-              <View style={[styles.sectionRow, { marginTop: 24 }]}>
-                <Text style={[styles.sectionLabel, { color: colors.secondaryLabel, marginTop: 0 }]}>BANCOS</Text>
-                <Pressable onPress={() => setBankModal(true)} hitSlop={12}>
-                  <Ionicons name="add-circle" size={22} color={colors.blue} />
-                </Pressable>
-              </View>
-              <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
-                {banks.map((b, i) => (
-                  <View key={b.id}>
-                    {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator, marginLeft: 52 }]} />}
-                    <View style={styles.bankRow}>
-                      <View style={[styles.bankDot, { backgroundColor: b.color }]} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.bankName, { color: colors.label }]}>{b.name}</Text>
-                        {(b.closing_day || b.due_day) && (
-                          <Text style={[styles.invSub, { color: colors.tertiaryLabel }]}>
-                            {b.closing_day ? `Fech. dia ${b.closing_day}` : ''}{b.closing_day && b.due_day ? ' · ' : ''}{b.due_day ? `Venc. dia ${b.due_day}` : ''}
-                          </Text>
-                        )}
-                      </View>
-                      <View style={[styles.statusBadge, { backgroundColor: b.status === 'ready' ? `${colors.green}20` : `${colors.orange}20` }]}>
-                        <Text style={[styles.statusText, { color: b.status === 'ready' ? colors.green : colors.orange }]}>
-                          {b.status === 'ready' ? 'Pronto' : 'Pendente'}
-                        </Text>
-                      </View>
-                      {!b.has_native_parser && (
-                        <Pressable onPress={() => handleDeleteBank(b.id, b.name)} hitSlop={12} style={{ marginLeft: 8 }}>
-                          <Ionicons name="close-circle" size={18} color={colors.tertiaryLabel} />
-                        </Pressable>
-                      )}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </>
-          )}
+
 
           <View style={{ height: 100 }} />
         </ScrollView>
@@ -452,48 +381,7 @@ export default function ImportScreen() {
         </View>
       </Modal>
 
-      {/* ── ADD BANK MODAL ── */}
-      <Modal visible={bankModal} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.formModal, { backgroundColor: colors.surface, borderRadius: radius.xl }]}>
-            <Text style={[styles.modalTitle, { color: colors.label, marginBottom: 16 }]}>Novo Banco</Text>
-            <TextInput style={[styles.input, { backgroundColor: colors.bg, color: colors.label, borderRadius: radius.md }]}
-              placeholder="Nome do banco" placeholderTextColor={colors.tertiaryLabel}
-              value={newBankName} onChangeText={setNewBankName} />
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Dia Fechamento</Text>
-                <TextInput style={[styles.input, { backgroundColor: colors.bg, color: colors.label, borderRadius: radius.md }]}
-                  placeholder="Ex: 03" placeholderTextColor={colors.tertiaryLabel} keyboardType="number-pad"
-                  value={newClosingDay} onChangeText={setNewClosingDay} maxLength={2} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Dia Vencimento</Text>
-                <TextInput style={[styles.input, { backgroundColor: colors.bg, color: colors.label, borderRadius: radius.md }]}
-                  placeholder="Ex: 09" placeholderTextColor={colors.tertiaryLabel} keyboardType="number-pad"
-                  value={newDueDay} onChangeText={setNewDueDay} maxLength={2} />
-              </View>
-            </View>
-            <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Cor</Text>
-            <View style={styles.colorRow}>
-              {BANK_COLOR_OPTIONS.map(c => (
-                <Pressable key={c} onPress={() => setNewBankColor(c)}
-                  style={[styles.colorOption, { backgroundColor: c, borderWidth: newBankColor === c ? 3 : 0, borderColor: '#fff' }]} />
-              ))}
-            </View>
-            <View style={styles.formActions}>
-              <Pressable onPress={() => setBankModal(false)} style={styles.cancelBtn}>
-                <Text style={[{ color: colors.red, fontSize: 15 }]}>Cancelar</Text>
-              </Pressable>
-              <Pressable style={[styles.saveBtn, { backgroundColor: colors.blue, borderRadius: radius.md }]}
-                onPress={handleCreateBank} disabled={bankSaving}>
-                {bankSaving ? <ActivityIndicator size="small" color="#fff" /> :
-                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>Criar</Text>}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+
 
       {/* ── SELECT BANK + MONTH MODAL ── */}
       <Modal visible={selectModal} animationType="fade" transparent>
@@ -502,10 +390,10 @@ export default function ImportScreen() {
             <Text style={[styles.modalTitle, { color: colors.label, marginBottom: 4 }]}>Importar Fatura</Text>
             <Text style={[styles.invSub, { color: colors.secondaryLabel, marginBottom: 16 }]}>{fileName}</Text>
 
-            <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Banco</Text>
+            <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Banco (apenas com parser pronto)</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                {banks.map(b => (
+                {banks.filter(b => b.parser_status === 'ready').map(b => (
                   <Pressable key={b.slug}
                     onPress={() => setSelectedBank(b.slug)}
                     style={[styles.chipBtn, {
@@ -520,7 +408,7 @@ export default function ImportScreen() {
               </View>
             </ScrollView>
 
-            <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Mês/Ano da Fatura</Text>
+            <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Mês/Ano de Pagamento</Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', gap: 4 }}>

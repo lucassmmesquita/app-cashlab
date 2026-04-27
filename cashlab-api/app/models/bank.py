@@ -1,7 +1,8 @@
 """CashLab — Bank model (bancos emissores de faturas)"""
 from typing import Optional
+from datetime import datetime
 
-from sqlalchemy import String, Integer, Boolean
+from sqlalchemy import String, Integer, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -19,4 +20,8 @@ class Bank(Base, TimestampMixin, SoftDeleteMixin):
     has_native_parser: Mapped[bool] = mapped_column(Boolean, default=False)
     closing_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # dia fechamento
     due_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)      # dia vencimento
+
+    # Parser training lifecycle: pending → processing → ready | error
+    parser_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    parser_trained_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
 

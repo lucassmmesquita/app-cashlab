@@ -31,6 +31,18 @@ MAX_SIZE = settings.MAX_PDF_SIZE_MB * 1024 * 1024  # bytes
 _pending_pdf_imports: dict = {}
 
 
+def _previous_month(month: str) -> str:
+    """Get previous month string from 'YYYY-MM' format."""
+    try:
+        year, m = month.split("-")
+        y, mo = int(year), int(m)
+        if mo == 1:
+            return f"{y - 1}-12"
+        return f"{y}-{mo - 1:02d}"
+    except (ValueError, IndexError):
+        return month
+
+
 # ── Helpers ────────────────────────────────────────────────────────
 
 async def get_or_create_card(
@@ -184,10 +196,16 @@ async def upload_invoice(
             })
 
         # 8. Store parsed result in memory for confirm step
+        # reference_month do usuário = mês de PAGAMENTO da fatura
         final_ref_month = reference_month if reference_month else result.reference_month
+        payment_month = final_ref_month
+        competence_month = _previous_month(payment_month)
+
         _pending_pdf_imports[file_id] = {
             "bank": detected_bank,
             "reference_month": final_ref_month,
+            "payment_month": payment_month,
+            "competence_month": competence_month,
             "due_date": result.due_date.isoformat() if result.due_date else None,
             "total_amount": str(result.total_amount),
             "card_last_digits": result.card_last_digits,
@@ -202,6 +220,8 @@ async def upload_invoice(
                 "file_id": file_id,
                 "bank": detected_bank,
                 "reference_month": result.reference_month,
+                "payment_month": payment_month,
+                "competence_month": competence_month,
                 "due_date": result.due_date.isoformat() if result.due_date else None,
                 "total_amount": str(result.total_amount),
                 "card_last_digits": result.card_last_digits,
@@ -241,6 +261,8 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
     try:
         detected_bank = pending["bank"]
         reference_month = pending["reference_month"]
+        payment_month = pending.get("payment_month", reference_month)
+        competence_month = pending.get("competence_month", _previous_month(payment_month))
         due_date_str = pending.get("due_date")
         total_amount = Decimal(pending["total_amount"])
         card_last_digits = pending["card_last_digits"]
@@ -268,6 +290,8 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
         invoice = Invoice(
             card_id=card.id,
             reference_month=reference_month,
+            payment_month=payment_month,
+            competence_month=competence_month,
             due_date=due_date,
             total_amount=total_amount,
             pdf_file_path=f"uploads/{file_id}.pdf",
@@ -324,7 +348,7 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
                 who=None,
                 is_international=tx.get("is_international", False),
                 iof_amount=iof_amount,
-                billing_month=reference_month,
+                billing_month=competence_month,
                 source_type="FATURA",
             )
             db.add(transaction)
@@ -408,6 +432,8 @@ async def list_invoices(
         data.append({
             "id": inv.id,
             "reference_month": inv.reference_month,
+            "payment_month": inv.payment_month,
+            "competence_month": inv.competence_month,
             "due_date": inv.due_date.isoformat() if inv.due_date else None,
             "total_amount": str(inv.total_amount),
             "status": inv.status,
@@ -450,6 +476,8 @@ async def get_invoice(invoice_id: int, db: AsyncSession = Depends(get_db)):
         "data": {
             "id": inv.id,
             "reference_month": inv.reference_month,
+            "payment_month": inv.payment_month,
+            "competence_month": inv.competence_month,
             "due_date": inv.due_date.isoformat() if inv.due_date else None,
             "total_amount": str(inv.total_amount),
             "status": inv.status,

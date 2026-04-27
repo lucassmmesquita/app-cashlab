@@ -218,6 +218,16 @@ run_ios_local() {
   press_enter
 }
 
+run_ios_simulator() {
+  echo -e "\n${BOLD}  📱 Rodar no iOS Simulator${NC}"
+  separator
+  cd "$APP_DIR"
+  info "Iniciando build para iOS Simulator..."
+  npx expo run:ios
+
+  press_enter
+}
+
 # ═══════════════════════════════════════════════════════════════
 # 3. BANCO DE DADOS
 # ═══════════════════════════════════════════════════════════════
@@ -602,16 +612,17 @@ main_menu() {
     echo "    4)  📱  Expo dev server"
     echo "    5)  🔨  EAS Build (iOS)"
     echo "    6)  🔌  Rodar no iPhone (USB)"
+    echo "    7)  🖥️   Rodar no iOS Simulator"
     echo ""
     echo -e "  ${BOLD}Banco de Dados${NC}"
-    echo "    7)  📊  Estatísticas"
-    echo "    8)  🔧  Migrações"
-    echo "    9)  🧹  Limpar dados"
+    echo "    8)  📊  Estatísticas"
+    echo "    9)  🔧  Migrações"
+    echo "    10) 🧹  Limpar dados"
     echo ""
     echo -e "  ${BOLD}Git & Testes${NC}"
-    echo "    10) 📦  Git status"
-    echo "    11) ⚡  Quick push"
-    echo "    12) 🧪  Testar parser PDF"
+    echo "    11) 📦  Git status"
+    echo "    12) ⚡  Quick push"
+    echo "    13) 🧪  Testar parser PDF"
     echo ""
     echo "    0)  🚪  Sair"
     echo ""
@@ -626,12 +637,13 @@ main_menu() {
       4)  run_expo_dev ;;
       5)  run_ios_device ;;
       6)  run_ios_local ;;
-      7)  db_stats ;;
-      8)  db_migrate ;;
-      9)  db_clean ;;
-      10) git_status ;;
-      11) quick_push ;;
-      12) test_parser ;;
+      7)  run_ios_simulator ;;
+      8)  db_stats ;;
+      9)  db_migrate ;;
+      10) db_clean ;;
+      11) git_status ;;
+      12) quick_push ;;
+      13) test_parser ;;
       0)  echo -e "\n  ${CYAN}Até mais! 👋${NC}\n"; exit 0 ;;
       *)  warn "Opção inválida" ;;
     esac

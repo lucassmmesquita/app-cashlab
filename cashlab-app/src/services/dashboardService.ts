@@ -25,6 +25,11 @@ export interface DashboardResponse {
   total_weekly_expenses: string;
   total_expenses: string;
   balance: string;
+  fixed_pct: number;
+  card_pct: number;
+  total_pct: number;
+  free_pct: number;
+  deficit_pct: number;
   by_category: {
     category_name: string;
     total_amount: string;

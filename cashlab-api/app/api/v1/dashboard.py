@@ -84,13 +84,14 @@ async def get_dashboard(month: str, db: AsyncSession = Depends(get_db)):
     )
     total_fixed_expenses = fixed_result.scalar() or Decimal("0")
 
-    # ── 3. Total de Gastos com Cartão (transações do mês) ──────────
+    # ── 3. Total de Gastos com Cartão (faturas com pagamento no mês) ──
+    # Usa Invoice.payment_month — quando o dinheiro efetivamente sai da conta
     card_result = await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount), 0))
+        select(func.coalesce(func.sum(Invoice.total_amount), 0))
         .where(
-            Transaction.billing_month == month,
-            Transaction.deleted_at == None,
-            Transaction.source_type == "FATURA",  # Apenas dados oficiais
+            Invoice.payment_month == month,
+            Invoice.deleted_at == None,
+            Invoice.source_type == "PDF",
         )
     )
     total_card_expenses = card_result.scalar() or Decimal("0")
@@ -227,11 +228,11 @@ async def get_dashboard(month: str, db: AsyncSession = Depends(get_db)):
     # 7d. Tendência — comparar com mês anterior
     prev_month = _previous_month(month)
     prev_result = await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount), 0))
+        select(func.coalesce(func.sum(Invoice.total_amount), 0))
         .where(
-            Transaction.billing_month == prev_month,
-            Transaction.deleted_at == None,
-            Transaction.source_type == "FATURA",
+            Invoice.payment_month == prev_month,
+            Invoice.deleted_at == None,
+            Invoice.source_type == "PDF",
         )
     )
     prev_total = float(prev_result.scalar() or 0)
@@ -261,6 +262,13 @@ async def get_dashboard(month: str, db: AsyncSession = Depends(get_db)):
             "message": f"{insight['title']}: {insight['message']}",
         })
 
+    # ── Progress bar percentages ──────────────────────────────────
+    fixed_pct = _safe_pct(total_fixed_expenses, total_income)
+    card_pct = _safe_pct(total_card_expenses, total_income)
+    total_pct = _safe_pct(total_expenses, total_income)
+    free_pct = max(0, round(100 - total_pct, 1))
+    deficit_pct = max(0, round(total_pct - 100, 1)) if total_pct > 100 else 0
+
     return {
         "data": {
             "month": month,
@@ -270,6 +278,11 @@ async def get_dashboard(month: str, db: AsyncSession = Depends(get_db)):
             "total_weekly_expenses": _decimal_to_str(total_weekly_expenses),
             "total_expenses": _decimal_to_str(total_expenses),
             "balance": _decimal_to_str(balance),
+            "fixed_pct": fixed_pct,
+            "card_pct": card_pct,
+            "total_pct": total_pct,
+            "free_pct": free_pct,
+            "deficit_pct": deficit_pct,
             "by_category": by_category,
             "by_member": by_member,
             "by_card": by_card,

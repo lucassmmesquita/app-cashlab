@@ -27,6 +27,11 @@ class Invoice(Base, TimestampMixin, SoftDeleteMixin):
     source_type: Mapped[str] = mapped_column(String(20), default="PDF", nullable=False)  # PDF | SCREENSHOT
     parsed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
 
+    # Competência vs Pagamento — regra de negócio
+    payment_month: Mapped[Optional[str]] = mapped_column(String(7), default=None, index=True)      # Mês de pagamento (quando o dinheiro sai da conta)
+    competence_month: Mapped[Optional[str]] = mapped_column(String(7), default=None, index=True)    # Mês de competência (quando as compras são contabilizadas)
+
     # Relationships
     card = relationship("CreditCard", back_populates="invoices")
     transactions = relationship("Transaction", back_populates="invoice")
+
