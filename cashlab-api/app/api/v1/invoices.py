@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import get_db, settings
-from app.models import CreditCard, Invoice, Transaction, Member
+from app.models import CreditCard, Invoice, Transaction, Member, Bank
 from app.parsers.detector import detect_bank, get_parser
 from app.services.categorization_service import get_categorization_engine
 
@@ -404,11 +404,14 @@ async def list_invoices(
     query = (
         select(
             Invoice,
-            CreditCard.bank.label("bank_name"),
+            CreditCard.bank.label("bank_slug"),
             CreditCard.last_digits.label("card_last_digits"),
             func.count(Transaction.id).label("transaction_count"),
+            Bank.name.label("bank_display_name"),
+            Bank.color.label("bank_color"),
         )
         .outerjoin(CreditCard, Invoice.card_id == CreditCard.id)
+        .outerjoin(Bank, CreditCard.bank == Bank.slug)
         .outerjoin(
             Transaction,
             (Transaction.invoice_id == Invoice.id) & (Transaction.deleted_at == None),
@@ -421,14 +424,14 @@ async def list_invoices(
 
     query = (
         query
-        .group_by(Invoice.id, CreditCard.bank, CreditCard.last_digits)
+        .group_by(Invoice.id, CreditCard.bank, CreditCard.last_digits, Bank.name, Bank.color)
         .order_by(Invoice.created_at.desc())
     )
     result = await db.execute(query)
     rows = result.all()
 
     data = []
-    for inv, bank_name, card_last_digits, tx_count in rows:
+    for inv, bank_slug, card_last_digits, tx_count, bank_display_name, bank_color in rows:
         data.append({
             "id": inv.id,
             "reference_month": inv.reference_month,
@@ -438,7 +441,9 @@ async def list_invoices(
             "total_amount": str(inv.total_amount),
             "status": inv.status,
             "card_id": inv.card_id,
-            "bank_name": bank_name,
+            "bank_name": bank_display_name or bank_slug,
+            "bank_slug": bank_slug,
+            "bank_color": bank_color or "#007AFF",
             "card_last_digits": card_last_digits,
             "transaction_count": tx_count,
             "file_size": inv.file_size,

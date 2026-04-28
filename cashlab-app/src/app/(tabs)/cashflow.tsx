@@ -19,7 +19,7 @@ import api from '@/services/api';
 
 interface IncomeItem { id: number; source: string; amount: number; type: string; note: string; }
 interface ExpenseItem { id: number; description: string; amount: number; category: string; note: string; }
-interface CardInvoice { id: number; reference_month: string; due_date: string | null; total_amount: string; card_id: number; bank?: string; }
+interface CardInvoice { id: number; reference_month: string; due_date: string | null; total_amount: string; card_id: number; bank?: string; bank_name?: string; bank_slug?: string; bank_color?: string; card_last_digits?: string; }
 
 // Goal types
 interface GoalItem {
@@ -429,11 +429,13 @@ export default function CashFlowScreen() {
                 <View key={inv.id}>
                   {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator, marginLeft: 52 }]} />}
                   <View style={styles.lineRow}>
-                    <View style={[styles.bankDot, { backgroundColor: BANK_COLORS[inv.bank || 'bv'] || colors.blue }]} />
+                    <View style={[styles.bankDot, { backgroundColor: inv.bank_color || BANK_COLORS[inv.bank || 'bv'] || colors.blue }]} />
                     <View style={styles.lineBody}>
-                      <Text style={[styles.lineTitle, { color: colors.label }]}>Fatura {inv.reference_month}</Text>
+                      <Text style={[styles.lineTitle, { color: colors.label }]}>
+                        {inv.bank_name || inv.bank || 'Cartão'}{inv.card_last_digits ? ` · ${inv.card_last_digits}` : ''}
+                      </Text>
                       <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>
-                        {inv.due_date ? `Vencimento ${inv.due_date.split('-').reverse().join('/')}` : 'Sem vencimento'}
+                        Fatura {inv.reference_month} · {inv.due_date ? `Venc. ${inv.due_date.split('-').reverse().join('/')}` : 'Sem vencimento'}
                       </Text>
                     </View>
                     <Text style={[styles.lineAmount, { color: colors.label }]}>-{formatCurrency(inv.total_amount)}</Text>

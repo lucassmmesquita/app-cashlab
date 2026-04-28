@@ -1,7 +1,7 @@
 /**
- * CashLab — Tela Cartões (Gestão de Faturas + Bancos)
+ * CashLab — Tela Cartões (Gestão de Faturas)
  *
- * Seções: Importar Fatura | Faturas Importadas | Bancos
+ * v2.1: Wizard onboarding no primeiro acesso + fluxo assistido de importação.
  */
 import React, { useState, useCallback, useEffect } from 'react';
 import {
@@ -183,8 +183,24 @@ export default function ImportScreen() {
             </View>
           )}
 
-          {/* ── IMPORT FLOW ── */}
-          {step === 'idle' && (
+          {/* ── WIZARD ONBOARDING (nenhum cartão/fatura cadastrado) ── */}
+          {step === 'idle' && !loading && invoices.length === 0 && (
+            <View style={{ alignItems: 'center', paddingVertical: 40, gap: 16 }}>
+              <Ionicons name="card-outline" size={64} color={colors.tertiaryLabel} />
+              <Text style={[styles.onboardTitle, { color: colors.label }]}>Bem-vindo ao CashLab!</Text>
+              <Text style={[styles.onboardSub, { color: colors.secondaryLabel }]}>
+                Importe sua primeira fatura de cartão{'\n'}para começar a controlar seus gastos.
+              </Text>
+              <Pressable style={({ pressed }) => [styles.importBtn, { backgroundColor: colors.blue, borderRadius: radius.lg, opacity: pressed ? 0.85 : 1, width: '100%' }]}
+                onPress={handlePickFile}>
+                <Ionicons name="cloud-upload" size={22} color="#fff" />
+                <Text style={styles.importBtnText}>Importar Fatura (PDF)</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* ── IMPORT FLOW (quando já tem cartões ou está no fluxo) ── */}
+          {step === 'idle' && invoices.length > 0 && (
             <Pressable style={({ pressed }) => [styles.importBtn, { backgroundColor: colors.blue, borderRadius: radius.lg, opacity: pressed ? 0.85 : 1 }]}
               onPress={handlePickFile}>
               <Ionicons name="cloud-upload" size={22} color="#fff" />
@@ -217,6 +233,15 @@ export default function ImportScreen() {
                     <Text style={[styles.statValue, { color: colors.label }]}>{preview.transaction_count}</Text>
                   </View>
                 </View>
+              </View>
+              {/* Confirmação — Etapa 3 do wizard: "Deseja importar esta fatura?" */}
+              <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: 16, alignItems: 'center', marginTop: 8 }]}>
+                <Text style={[{ fontSize: 16, fontWeight: '600', color: colors.label, textAlign: 'center' }]}>
+                  Deseja importar esta fatura?
+                </Text>
+                <Text style={[{ fontSize: 13, color: colors.secondaryLabel, textAlign: 'center', marginTop: 4 }]}>
+                  O cartão e as transações serão criados automaticamente.
+                </Text>
               </View>
               <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, maxHeight: 300 }]}>
                 <ScrollView nestedScrollEnabled>
@@ -254,6 +279,9 @@ export default function ImportScreen() {
               <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: 24, alignItems: 'center' }]}>
                 <Ionicons name="checkmark-circle" size={48} color={colors.green} />
                 <Text style={[styles.doneTitle, { color: colors.label }]}>Importação concluída!</Text>
+                <Text style={[styles.centerTextSm, { color: colors.secondaryLabel, marginTop: 4 }]}>
+                  Cartão, fatura e transações foram criados automaticamente.
+                </Text>
               </View>
               <Pressable style={({ pressed }) => [styles.importBtn, { backgroundColor: colors.blue, borderRadius: radius.xl, opacity: pressed ? 0.85 : 1 }]}
                 onPress={handleReset}>
@@ -262,16 +290,11 @@ export default function ImportScreen() {
             </>
           )}
 
-          {/* ── FATURAS IMPORTADAS ── */}
-          {step === 'idle' && (
+          {/* ── FATURAS IMPORTADAS (só aparece quando tem faturas) ── */}
+          {step === 'idle' && invoices.length > 0 && (
             <>
               <Text style={[styles.sectionLabel, { color: colors.secondaryLabel }]}>FATURAS IMPORTADAS</Text>
               {loading && <ActivityIndicator style={{ marginVertical: 12 }} color={colors.blue} />}
-              {!loading && invoices.length === 0 && (
-                <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: 24 }]}>
-                  <Text style={[styles.centerTextSm, { color: colors.secondaryLabel }]}>Nenhuma fatura importada ainda</Text>
-                </View>
-              )}
               {invoices.map((inv) => (
                 <Pressable key={inv.id}
                   style={({ pressed }) => [styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, opacity: pressed ? 0.9 : 1, marginBottom: 8 }]}
@@ -390,7 +413,7 @@ export default function ImportScreen() {
             <Text style={[styles.modalTitle, { color: colors.label, marginBottom: 4 }]}>Importar Fatura</Text>
             <Text style={[styles.invSub, { color: colors.secondaryLabel, marginBottom: 16 }]}>{fileName}</Text>
 
-            <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Banco (apenas com parser pronto)</Text>
+            <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Cartão (apenas com parser pronto)</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {banks.filter(b => b.parser_status === 'ready').map(b => (
@@ -489,6 +512,8 @@ const styles = StyleSheet.create({
   txAmt: { fontSize: 15, fontWeight: '600', marginLeft: 8 },
 
   doneTitle: { fontSize: 22, fontWeight: '700', marginTop: 12 },
+  onboardTitle: { fontSize: 24, fontWeight: '700', textAlign: 'center' },
+  onboardSub: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
 
   sectionLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1, marginTop: 20, marginBottom: 8, paddingHorizontal: 4 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4, marginBottom: 8 },

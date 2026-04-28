@@ -219,7 +219,7 @@ async def confirm_screenshot_import(
             reference_month=ref_month,
             total_amount=sum(tx["amount"] for tx in pending["transactions"]),
             status="confirmed",
-            source_type="SCREENSHOT",
+            source_type="PROJECAO_FATURA",
             parsed_at=datetime.utcnow(),
             pdf_file_path=pending["file_path"],
             pdf_hash=file_id,
@@ -265,7 +265,7 @@ async def confirm_screenshot_import(
                 amount=tx_data["amount"],
                 who=tx_member.name,
                 billing_month=ref_month,
-                source_type="GASTO_SEMANAL",
+                source_type="PROJECAO_FATURA",
             )
             db.add(transaction)
             tx_count += 1

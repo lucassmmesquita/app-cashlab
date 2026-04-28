@@ -1,8 +1,8 @@
 /**
  * CashLab — Settings (iOS Design System v2)
  *
- * Seções: Aparência (tema), Segurança (Face ID), Bancos (CRUD + parser), Conta (logout).
- * v2.0: Cadastro de bancos migrado da tela Cartões para cá.
+ * Seções: Aparência (tema), Segurança (Face ID), Cartões (CRUD + parser), Conta (logout).
+ * v2.0: Cadastro de cartões gerenciado aqui.
  */
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Switch, Alert, Platform, RefreshControl, Modal, TextInput, ActivityIndicator } from 'react-native';
@@ -101,7 +101,7 @@ export default function SettingsScreen() {
       setNewBankName(''); setNewClosingDay(''); setNewDueDay('');
       fetchBanks();
     } catch (err: any) {
-      Alert.alert('Erro', err.response?.data?.detail || 'Erro ao criar banco');
+      Alert.alert('Erro', err.response?.data?.detail || 'Erro ao criar cartão');
     } finally { setBankSaving(false); }
   };
 
@@ -148,7 +148,7 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteBank = (id: number, name: string) => {
-    Alert.alert('Excluir Banco', `Remover "${name}"?`, [
+    Alert.alert('Excluir Cartão', `Remover "${name}"?`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Excluir', style: 'destructive', onPress: async () => {
         try { await bankService.remove(id); fetchBanks(); } catch (err: any) {
@@ -236,9 +236,9 @@ export default function SettingsScreen() {
             </Text>
           </View>
 
-          {/* ── BANCOS (migrado de Cartões) ── */}
+          {/* ── CARTÕES (emissores de fatura) ── */}
           <View style={[styles.sectionRow, { marginTop: 24 }]}>
-            <Text style={[styles.sectionLabel, { color: colors.secondaryLabel, marginTop: 0 }]}>BANCOS</Text>
+            <Text style={[styles.sectionLabel, { color: colors.secondaryLabel, marginTop: 0 }]}>CARTÕES</Text>
             <Pressable onPress={() => setBankModal(true)} hitSlop={12}>
               <Ionicons name="add-circle" size={22} color={colors.blue} />
             </Pressable>
@@ -287,9 +287,9 @@ export default function SettingsScreen() {
       <Modal visible={bankModal} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.formModal, { backgroundColor: colors.surface, borderRadius: radius.xl }]}>
-            <Text style={[styles.modalTitle, { color: colors.label, marginBottom: 16 }]}>Novo Banco</Text>
+            <Text style={[styles.modalTitle, { color: colors.label, marginBottom: 16 }]}>Novo Cartão</Text>
             <TextInput style={[styles.input, { backgroundColor: colors.bg, color: colors.label, borderRadius: radius.md }]}
-              placeholder="Nome do banco" placeholderTextColor={colors.tertiaryLabel}
+              placeholder="Nome do cartão (ex: Itaú, BV)" placeholderTextColor={colors.tertiaryLabel}
               value={newBankName} onChangeText={setNewBankName} />
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
               <View style={{ flex: 1 }}>
@@ -334,7 +334,7 @@ export default function SettingsScreen() {
         <View style={[styles.container, { backgroundColor: colors.bg }]}>
           <SafeAreaView style={{ flex: 1 }} edges={['top']}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
-              <Text style={[styles.modalTitle, { color: colors.label }]}>Detalhes do Banco</Text>
+              <Text style={[styles.modalTitle, { color: colors.label }]}>Detalhes do Cartão</Text>
               <Pressable onPress={() => setDetailModal(false)}>
                 <Ionicons name="close-circle" size={28} color={colors.secondaryLabel} />
               </Pressable>
@@ -405,7 +405,7 @@ export default function SettingsScreen() {
                 {!detailBank.has_native_parser && (
                   <Pressable style={[styles.actionBtn, { backgroundColor: `${colors.red}10`, borderRadius: radius.md, marginTop: 12 }]}
                     onPress={() => { setDetailModal(false); handleDeleteBank(detailBank.id, detailBank.name); }}>
-                    <Text style={[styles.actionBtnText, { color: colors.red }]}>Excluir Banco</Text>
+                    <Text style={[styles.actionBtnText, { color: colors.red }]}>Excluir Cartão</Text>
                   </Pressable>
                 )}
 

@@ -17,7 +17,7 @@ async def list_transactions(
     bank: Optional[str] = Query(None, description="Filtro por banco (bv,itau)"),
     member: Optional[str] = Query(None, description="Filtro por membro (LUCAS,JURA)"),
     category_id: Optional[int] = Query(None, description="Filtro por categoria"),
-    source_type: Optional[str] = Query(None, description="Filtro por tipo (FATURA,GASTO_SEMANAL)"),
+    source_type: Optional[str] = Query(None, description="Filtro por tipo (FATURA,PROJECAO_FATURA)"),
     search: Optional[str] = Query(None, description="Busca por descrição"),
     page: int = Query(1, ge=1),
     per_page: int = Query(500, ge=1, le=1000),

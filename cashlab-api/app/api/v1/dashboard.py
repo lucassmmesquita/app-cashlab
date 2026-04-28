@@ -102,7 +102,7 @@ async def get_dashboard(month: str, db: AsyncSession = Depends(get_db)):
         .where(
             Transaction.billing_month == month,
             Transaction.deleted_at == None,
-            Transaction.source_type == "GASTO_SEMANAL",
+            Transaction.source_type == "PROJECAO_FATURA",
         )
     )
     total_weekly_expenses = weekly_result.scalar() or Decimal("0")

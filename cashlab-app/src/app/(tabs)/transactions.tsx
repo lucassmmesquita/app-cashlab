@@ -33,12 +33,12 @@ interface Transaction {
   card: string;
   installment: string | null;
   location: string | null;
-  source_type: 'FATURA' | 'GASTO_SEMANAL';
+  source_type: 'FATURA' | 'PROJECAO_FATURA';
 }
 
 type FilterType = 'all' | 'BV' | 'ITAU';
 type MemberFilter = 'all' | 'LUCAS' | 'JURA' | 'JOICE';
-type SourceFilter = 'all' | 'FATURA' | 'GASTO_SEMANAL';
+type SourceFilter = 'all' | 'FATURA' | 'PROJECAO_FATURA';
 
 type ImportStep = 'idle' | 'uploading' | 'preview' | 'confirming';
 interface ImportPreview {
@@ -240,20 +240,20 @@ export default function TransactionsScreen() {
               </Pressable>
             ))}
             <View style={styles.chipSpacer} />
-            {(['all', 'FATURA', 'GASTO_SEMANAL'] as SourceFilter[]).map(f => (
+            {(['all', 'FATURA', 'PROJECAO_FATURA'] as SourceFilter[]).map(f => (
               <Pressable key={f} onPress={() => setSourceFilter(f)}
                 style={[styles.chip, {
                   backgroundColor: sourceFilter === f ? colors.blue : colors.segmentBg,
                   borderRadius: 20,
                 }]}>
                 <Ionicons
-                  name={f === 'FATURA' ? 'document-text' : f === 'GASTO_SEMANAL' ? 'camera' : 'layers'}
+                  name={f === 'FATURA' ? 'document-text' : f === 'PROJECAO_FATURA' ? 'trending-up' : 'layers'}
                   size={14}
                   color={sourceFilter === f ? '#fff' : colors.label}
                   style={{ marginRight: 4 }}
                 />
                 <Text style={[styles.chipText, { color: sourceFilter === f ? '#fff' : colors.label }]}>
-                  {f === 'all' ? 'Tipo' : f === 'FATURA' ? 'Fatura' : 'Semanal'}
+                  {f === 'all' ? 'Tipo' : f === 'FATURA' ? 'Fatura' : 'Projeção'}
                 </Text>
               </Pressable>
             ))}
@@ -300,10 +300,10 @@ export default function TransactionsScreen() {
                                 <Text style={[styles.installText, { color: colors.blue }]}>{tx.installment}</Text>
                               </View>
                             )}
-                            {tx.source_type === 'GASTO_SEMANAL' && (
+                            {tx.source_type === 'PROJECAO_FATURA' && (
                               <View style={[styles.installBadge, { backgroundColor: `${colors.orange}15` }]}>
-                                <Ionicons name="camera" size={10} color={colors.orange} />
-                                <Text style={[styles.installText, { color: colors.orange, marginLeft: 2 }]}>Print</Text>
+                                <Ionicons name="trending-up" size={10} color={colors.orange} />
+                                <Text style={[styles.installText, { color: colors.orange, marginLeft: 2 }]}>Projeção</Text>
                               </View>
                             )}
                           </View>
@@ -347,7 +347,7 @@ export default function TransactionsScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.label }]}>Importar Transações</Text>
+              <Text style={[styles.modalTitle, { color: colors.label }]}>Importar Projeção de Fatura</Text>
               <TouchableOpacity onPress={() => setImportModalVisible(false)}>
                 <Ionicons name="close-circle" size={28} color={colors.tertiaryLabel} />
               </TouchableOpacity>
@@ -367,7 +367,7 @@ export default function TransactionsScreen() {
                 <Ionicons name="image-outline" size={48} color={colors.blue} />
                 <Text style={[styles.uploadTitle, { color: colors.label }]}>Selecionar print</Text>
                 <Text style={[styles.uploadSub, { color: colors.secondaryLabel }]}>
-                  Escolha um screenshot das transações semanais do cartão
+                Escolha um screenshot das transações do cartão para projeção
                 </Text>
               </TouchableOpacity>
             )}

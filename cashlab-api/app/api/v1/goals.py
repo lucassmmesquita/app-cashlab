@@ -328,8 +328,8 @@ async def _calc_full_progress(db: AsyncSession, goal: SpendingGoal) -> dict:
 
     # Current spending (FATURA — official)
     current_fatura = await _calc_current_spending(db, target_month, goal.card_id, "FATURA")
-    # Current spending (GASTO_SEMANAL — indicador)
-    current_weekly = await _calc_current_spending(db, target_month, goal.card_id, "GASTO_SEMANAL")
+    # Current spending (PROJECAO_FATURA — indicador)
+    current_weekly = await _calc_current_spending(db, target_month, goal.card_id, "PROJECAO_FATURA")
     current_total = float(current_fatura) + float(current_weekly)
 
     # Days elapsed

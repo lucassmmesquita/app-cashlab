@@ -74,6 +74,9 @@ async def auto_migrate():
         "ALTER TABLE invoices ADD COLUMN IF NOT EXISTS competence_month VARCHAR(7) DEFAULT NULL",
         "CREATE INDEX IF NOT EXISTS idx_invoices_payment_month ON invoices(payment_month)",
         "CREATE INDEX IF NOT EXISTS idx_invoices_competence_month ON invoices(competence_month)",
+        # v2.1 — Renomear GASTO_SEMANAL → PROJECAO_FATURA
+        "UPDATE transactions SET source_type = 'PROJECAO_FATURA' WHERE source_type = 'GASTO_SEMANAL'",
+        "UPDATE invoices SET source_type = 'PROJECAO_FATURA' WHERE source_type = 'SCREENSHOT'",
     ]
 
     for sql in migrations:
