@@ -396,6 +396,7 @@ async def confirm_import(file_id: str, db: AsyncSession = Depends(get_db)):
 @router.get("")
 async def list_invoices(
     month: str = None,
+    source_type: str = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Listar faturas importadas com informações enriquecidas"""
@@ -421,6 +422,8 @@ async def list_invoices(
 
     if month:
         query = query.where(Invoice.reference_month == month)
+    if source_type:
+        query = query.where(Invoice.source_type == source_type)
 
     query = (
         query
@@ -440,6 +443,7 @@ async def list_invoices(
             "due_date": inv.due_date.isoformat() if inv.due_date else None,
             "total_amount": str(inv.total_amount),
             "status": inv.status,
+            "source_type": inv.source_type,
             "card_id": inv.card_id,
             "bank_name": bank_display_name or bank_slug,
             "bank_slug": bank_slug,

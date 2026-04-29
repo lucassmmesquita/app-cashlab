@@ -83,7 +83,7 @@ export default function CashFlowScreen() {
       const [incRes, expRes, invRes, goalsRes, banksRes] = await Promise.all([
         api.get('/incomes', { params: { month: selectedMonth } }),
         api.get('/fixed-expenses', { params: { month: selectedMonth } }),
-        api.get('/invoices', { params: { month: selectedMonth } }),
+        api.get('/invoices', { params: { month: selectedMonth, source_type: 'PDF' } }),
         api.get('/goals', { params: { status: 'active' } }).catch(() => ({ data: { data: [] } })),
         bankService.list().catch(() => []),
       ]);

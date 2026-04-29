@@ -19,6 +19,8 @@ import { useMonthNavigation } from '@/hooks/useMonthNavigation';
 import { MonthNavigator } from '@/components/dashboard/MonthNavigator';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 import { getCategoryColor, getMemberColor, BANK_COLORS } from '@/utils/colors';
+import { bankService } from '@/services/bankService';
+import type { BankItem } from '@/services/bankService';
 import api from '@/services/api';
 
 interface Transaction {
@@ -65,6 +67,8 @@ export default function TransactionsScreen() {
   const [importStep, setImportStep] = useState<ImportStep>('idle');
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importBanks, setImportBanks] = useState<BankItem[]>([]);
+  const [selectedImportBank, setSelectedImportBank] = useState<string>('');
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -85,6 +89,11 @@ export default function TransactionsScreen() {
   }, [selectedMonth, bankFilter, memberFilter, sourceFilter, search]);
 
   useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
+
+  // Fetch banks for import selector
+  useEffect(() => {
+    bankService.list().then(b => setImportBanks(b.filter(x => x.parser_status === 'ready'))).catch(() => {});
+  }, []);
 
   // Group by date
   const grouped = useMemo(() => {
@@ -150,7 +159,12 @@ export default function TransactionsScreen() {
     if (!importPreview) return;
     setImportStep('confirming');
     try {
-      await api.post(`/transactions/import-screenshot/${importPreview.file_id}/confirm`);
+      await api.post(`/transactions/import-screenshot/${importPreview.file_id}/confirm`, null, {
+        params: {
+          reference_month: selectedMonth,
+          bank_slug: selectedImportBank || undefined,
+        },
+      });
       setImportModalVisible(false);
       setImportStep('idle');
       setImportPreview(null);
@@ -166,6 +180,7 @@ export default function TransactionsScreen() {
     setImportStep('idle');
     setImportPreview(null);
     setImportError(null);
+    setSelectedImportBank('');
   };
 
   return (
@@ -360,16 +375,42 @@ export default function TransactionsScreen() {
             )}
 
             {importStep === 'idle' && (
-              <TouchableOpacity
-                style={[styles.uploadArea, { borderColor: colors.separator, backgroundColor: `${colors.blue}05` }]}
-                onPress={handlePickImage}
-              >
-                <Ionicons name="image-outline" size={48} color={colors.blue} />
-                <Text style={[styles.uploadTitle, { color: colors.label }]}>Selecionar print</Text>
-                <Text style={[styles.uploadSub, { color: colors.secondaryLabel }]}>
-                Escolha um screenshot das transações do cartão para projeção
-                </Text>
-              </TouchableOpacity>
+              <>
+                {/* Bank/Card selector */}
+                <Text style={[styles.selectorLabel, { color: colors.secondaryLabel }]}>Selecione o Cartão</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {importBanks.map(b => (
+                      <Pressable key={b.slug}
+                        onPress={() => setSelectedImportBank(b.slug)}
+                        style={[styles.chip, {
+                          backgroundColor: selectedImportBank === b.slug ? b.color : colors.segmentBg,
+                          borderRadius: 20,
+                        }]}>
+                        <View style={[styles.chipDot, { backgroundColor: selectedImportBank === b.slug ? '#fff' : b.color }]} />
+                        <Text style={[styles.chipText, { color: selectedImportBank === b.slug ? '#fff' : colors.label }]}>
+                          {b.name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+                {importBanks.length === 0 && (
+                  <Text style={[{ fontSize: 12, color: colors.tertiaryLabel, marginBottom: 12 }]}>
+                    Nenhum cartão com parser pronto. Vá em Settings para cadastrar.
+                  </Text>
+                )}
+                <TouchableOpacity
+                  style={[styles.uploadArea, { borderColor: colors.separator, backgroundColor: `${colors.blue}05` }]}
+                  onPress={handlePickImage}
+                >
+                  <Ionicons name="image-outline" size={48} color={colors.blue} />
+                  <Text style={[styles.uploadTitle, { color: colors.label }]}>Selecionar print</Text>
+                  <Text style={[styles.uploadSub, { color: colors.secondaryLabel }]}>
+                    Escolha um screenshot das transações do cartão para projeção
+                  </Text>
+                </TouchableOpacity>
+              </>
             )}
 
             {importStep === 'uploading' && (
@@ -465,6 +506,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: '700' },
   errorBox: { padding: 12, borderRadius: 8, marginBottom: 12 },
   errorText: { fontSize: 14 },
+  selectorLabel: { fontSize: 13, fontWeight: '600', marginBottom: 8 },
   uploadArea: { borderWidth: 2, borderStyle: 'dashed', borderRadius: 16, padding: 40, alignItems: 'center', gap: 8 },
   uploadTitle: { fontSize: 17, fontWeight: '600', marginTop: 8 },
   uploadSub: { fontSize: 13, textAlign: 'center' },

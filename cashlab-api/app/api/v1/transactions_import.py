@@ -179,6 +179,7 @@ async def import_screenshot(
 async def confirm_screenshot_import(
     file_id: str,
     reference_month: Optional[str] = None,
+    bank_slug: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Confirmar importação de transações extraídas do screenshot."""
@@ -197,14 +198,22 @@ async def confirm_screenshot_import(
         # Get or create a "manual" invoice for screenshot imports
         from app.models import Invoice as InvoiceModel
 
-        # Find the default card (first one, or create)
-        card_result = await db.execute(select(CreditCard).limit(1))
-        card = card_result.scalar_one_or_none()
+        # Find card by bank_slug if provided, otherwise first card
+        card = None
+        if bank_slug:
+            card_result = await db.execute(
+                select(CreditCard).where(CreditCard.bank == bank_slug).limit(1)
+            )
+            card = card_result.scalar_one_or_none()
+
+        if not card:
+            card_result = await db.execute(select(CreditCard).limit(1))
+            card = card_result.scalar_one_or_none()
 
         if not card:
             card = CreditCard(
                 member_id=member.id,
-                bank="manual",
+                bank=bank_slug or "manual",
                 last_digits="0000",
                 is_active=True,
             )
