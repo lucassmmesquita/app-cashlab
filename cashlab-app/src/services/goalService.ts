@@ -49,7 +49,7 @@ export interface GoalProgress {
   };
 }
 
-export interface GoalDetail extends GoalItem, GoalProgress {}
+export interface GoalDetail extends Omit<GoalItem, 'progress_pct'>, GoalProgress {}
 
 export const goalService = {
   async list(status?: string): Promise<GoalItem[]> {

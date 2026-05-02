@@ -7,10 +7,12 @@ import {
   Modal, TextInput, Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useMonthNavigation } from '@/hooks/useMonthNavigation';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { MonthNavigator } from '@/components/dashboard/MonthNavigator';
+import { SwipeableRow } from '@/components/common/SwipeableRow';
 import { formatCurrency } from '@/utils/formatters';
 import { bankService } from '@/services/bankService';
 import type { BankItem } from '@/services/bankService';
@@ -19,7 +21,7 @@ import api from '@/services/api';
 
 interface IncomeItem { id: number; source: string; amount: number; type: string; note: string; }
 interface ExpenseItem { id: number; description: string; amount: number; category: string; note: string; }
-interface CardInvoice { id: number; reference_month: string; due_date: string | null; total_amount: string; card_id: number; bank?: string; bank_name?: string; bank_slug?: string; bank_color?: string; card_last_digits?: string; }
+interface CardInvoice { id: number; reference_month: string; due_date: string | null; total_amount: string; card_id: number; bank?: string; bank_name?: string; bank_slug?: string; bank_color?: string; card_last_digits?: string; transaction_count?: number; source_type?: string; }
 
 // Goal types
 interface GoalItem {
@@ -54,6 +56,7 @@ export default function CashFlowScreen() {
   const [incomes, setIncomes] = useState<IncomeItem[]>(FALLBACK_INCOMES);
   const [expenses, setExpenses] = useState<ExpenseItem[]>(FALLBACK_EXPENSES);
   const [invoices, setInvoices] = useState<CardInvoice[]>([]);
+  const [projections, setProjections] = useState<CardInvoice[]>([]);
   const [goals, setGoals] = useState<GoalItem[]>([]);
   const [banks, setBanks] = useState<BankItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -80,19 +83,22 @@ export default function CashFlowScreen() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [incRes, expRes, invRes, goalsRes, banksRes] = await Promise.all([
+      const [incRes, expRes, invRes, projRes, goalsRes, banksRes] = await Promise.all([
         api.get('/incomes', { params: { month: selectedMonth } }),
         api.get('/fixed-expenses', { params: { month: selectedMonth } }),
         api.get('/invoices', { params: { month: selectedMonth, source_type: 'PDF' } }),
+        api.get('/invoices', { params: { month: selectedMonth, source_type: 'PROJECAO_FATURA' } }).catch(() => ({ data: { data: [] } })),
         api.get('/goals', { params: { status: 'active' } }).catch(() => ({ data: { data: [] } })),
         bankService.list().catch(() => []),
       ]);
       const incData = incRes.data?.data || [];
       const expData = expRes.data?.data || [];
       const invData = invRes.data?.data || [];
+      const projData = projRes.data?.data || [];
       setIncomes(incData.length > 0 ? incData : FALLBACK_INCOMES);
       setExpenses(expData.length > 0 ? expData : FALLBACK_EXPENSES);
       setInvoices(invData);
+      setProjections(projData);
       setGoals(goalsRes.data?.data || []);
       setBanks(Array.isArray(banksRes) ? banksRes : []);
     } catch {
@@ -108,7 +114,8 @@ export default function CashFlowScreen() {
   const totalIncome = incomes.reduce((s, i) => s + i.amount, 0);
   const totalFixed = expenses.reduce((s, e) => s + e.amount, 0);
   const totalCards = invoices.reduce((s, inv) => s + parseFloat(inv.total_amount || '0'), 0);
-  const totalExpenses = totalFixed + totalCards;
+  const totalProjections = projections.reduce((s, inv) => s + parseFloat(inv.total_amount || '0'), 0);
+  const totalExpenses = totalFixed + totalCards + totalProjections;
   const balance = totalIncome - totalExpenses;
   const isDeficit = balance < 0;
   const pctCompromised = totalIncome > 0 ? ((totalExpenses / totalIncome) * 100).toFixed(1) : '0';
@@ -244,7 +251,7 @@ export default function CashFlowScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.bg }]}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]} showsVerticalScrollIndicator={false}
           refreshControl={
@@ -274,24 +281,34 @@ export default function CashFlowScreen() {
 
           {/* Budget Progress Bar — Barra de Progresso Segmentada */}
           <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
-            <View style={{ padding: 16 }}>
-              <Text style={[styles.sumLabel, { color: colors.tertiaryLabel, marginBottom: 8 }]}>COMPOSIÇÃO DO MÊS</Text>
+            <View style={{ padding: 20, paddingBottom: 16 }}>
+              <Text style={[styles.sumLabel, { color: colors.tertiaryLabel, marginBottom: 12 }]}>COMPOSIÇÃO DO MÊS</Text>
               {/* Segmented bar */}
-              <View style={[styles.progressBg, { backgroundColor: colors.segmentBg, marginHorizontal: 0, marginBottom: 0, height: 14, borderRadius: 7, overflow: 'hidden', flexDirection: 'row' }]}>
+              <View style={{ height: 18, borderRadius: 9, overflow: 'hidden', flexDirection: 'row', backgroundColor: colors.segmentBg }}>
                 {/* Despesas Fixas — Azul */}
                 {totalIncome > 0 && (
                   <View style={{
                     width: `${Math.min((totalFixed / totalIncome) * 100, 100)}%`,
                     backgroundColor: colors.blue,
-                    height: 14,
+                    height: 18,
                   }} />
                 )}
                 {/* Cartão — Amarelo→Vermelho */}
                 {totalIncome > 0 && totalCards > 0 && (
                   <View style={{
                     width: `${Math.min((totalCards / totalIncome) * 100, 100 - Math.min((totalFixed / totalIncome) * 100, 100))}%`,
-                    backgroundColor: (totalFixed + totalCards) > totalIncome ? colors.red : '#F5A623',
-                    height: 14,
+                    backgroundColor: (totalFixed + totalCards + totalProjections) > totalIncome ? colors.red : '#F5A623',
+                    height: 18,
+                  }} />
+                )}
+                {/* Projeção — Laranja claro com pattern */}
+                {totalIncome > 0 && totalProjections > 0 && (
+                  <View style={{
+                    width: `${Math.min((totalProjections / totalIncome) * 100, Math.max(0, 100 - ((totalFixed + totalCards) / totalIncome) * 100))}%`,
+                    backgroundColor: '#F5A62360',
+                    height: 18,
+                    borderLeftWidth: totalCards > 0 ? 1 : 0,
+                    borderLeftColor: 'rgba(255,255,255,0.5)',
                   }} />
                 )}
                 {/* Saldo Livre — Verde (se houver) */}
@@ -299,13 +316,13 @@ export default function CashFlowScreen() {
                   <View style={{
                     flex: 1,
                     backgroundColor: `${colors.green}40`,
-                    height: 14,
+                    height: 18,
                   }} />
                 )}
               </View>
               {/* Excedente vermelho pulsante */}
               {isDeficit && totalIncome > 0 && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
                   <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.red, marginRight: 6 }} />
                   <Text style={{ color: colors.red, fontSize: 12, fontWeight: '700' }}>
                     Excedente: {(((totalExpenses / totalIncome) * 100) - 100).toFixed(1)}% acima da receita
@@ -315,40 +332,65 @@ export default function CashFlowScreen() {
             </View>
 
             {/* Legenda / detalhamento */}
-            <View style={[{ borderTopWidth: 0.5, borderTopColor: colors.separator }]}>
-              <View style={[styles.summaryRow, { paddingBottom: 4 }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.green, marginRight: 8 }} />
-                  <Text style={[styles.sumLabel, { color: colors.tertiaryLabel }]}>Receita Total</Text>
+            <View style={{ borderTopWidth: 0.5, borderTopColor: colors.separator, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 }}>
+              {/* Receita Total */}
+              <View style={styles.legendRow}>
+                <View style={styles.legendLeft}>
+                  <View style={[styles.legendDot, { backgroundColor: colors.green }]} />
+                  <Text style={[styles.legendLabel, { color: colors.secondaryLabel }]}>RECEITA TOTAL</Text>
                 </View>
-                <Text style={[styles.sumValue, { color: colors.green, fontSize: 16 }]}>{formatCurrency(totalIncome)}</Text>
+                <Text style={[styles.legendValue, { color: colors.green }]}>{formatCurrency(totalIncome)}</Text>
               </View>
-              <View style={[styles.summaryRow, { paddingTop: 2, paddingBottom: 4 }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.blue, marginRight: 8 }} />
-                  <Text style={[styles.sumLabel, { color: colors.tertiaryLabel }]}>Despesas Fixas</Text>
+              {/* Despesas Fixas */}
+              <View style={styles.legendRow}>
+                <View style={styles.legendLeft}>
+                  <View style={[styles.legendDot, { backgroundColor: colors.blue }]} />
+                  <Text style={[styles.legendLabel, { color: colors.secondaryLabel }]}>DESPESAS FIXAS</Text>
                 </View>
-                <Text style={[styles.sumValue, { color: colors.label, fontSize: 16 }]}>
-                  {formatCurrency(totalFixed)} ({totalIncome > 0 ? ((totalFixed / totalIncome) * 100).toFixed(0) : 0}%)
+                <Text style={[styles.legendValue, { color: colors.label }]}>
+                  {formatCurrency(totalFixed)}  <Text style={styles.legendPct}>({totalIncome > 0 ? ((totalFixed / totalIncome) * 100).toFixed(0) : 0}%)</Text>
                 </Text>
               </View>
-              <View style={[styles.summaryRow, { paddingTop: 2, paddingBottom: 4 }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: (totalFixed + totalCards) > totalIncome ? colors.red : '#F5A623', marginRight: 8 }} />
-                  <Text style={[styles.sumLabel, { color: colors.tertiaryLabel }]}>Cartão de Crédito</Text>
+              {/* Cartão de Crédito */}
+              <View style={styles.legendRow}>
+                <View style={styles.legendLeft}>
+                  <View style={[styles.legendDot, { backgroundColor: (totalFixed + totalCards) > totalIncome ? colors.red : '#F5A623' }]} />
+                  <Text style={[styles.legendLabel, { color: colors.secondaryLabel }]}>CARTÃO DE CRÉDITO</Text>
                 </View>
-                <Text style={[styles.sumValue, { color: colors.label, fontSize: 16 }]}>
-                  {formatCurrency(totalCards)} ({totalIncome > 0 ? ((totalCards / totalIncome) * 100).toFixed(0) : 0}%)
+                <Text style={[styles.legendValue, { color: colors.label }]}>
+                  {formatCurrency(totalCards)}  <Text style={styles.legendPct}>({totalIncome > 0 ? ((totalCards / totalIncome) * 100).toFixed(0) : 0}%)</Text>
                 </Text>
               </View>
-              <View style={[styles.summaryRow, { paddingTop: 2, paddingBottom: 12, borderTopWidth: 0.5, borderTopColor: colors.separator }]}>
-                <Text style={[styles.totalLabel, { color: isDeficit ? colors.red : colors.green }]}>
-                  {isDeficit ? 'DÉFICIT' : 'SALDO DISPONÍVEL'}
-                </Text>
-                <Text style={[styles.totalValue, { color: isDeficit ? colors.red : colors.green }]}>
-                  {formatCurrency(balance)}
-                </Text>
-              </View>
+              {/* Projeção de Fatura */}
+              {totalProjections > 0 && (
+                <View style={styles.legendRow}>
+                  <View style={styles.legendLeft}>
+                    <View style={[styles.legendDot, { backgroundColor: '#F5A62360', borderWidth: 1.5, borderColor: '#F5A623' }]} />
+                    <Text style={[styles.legendLabel, { color: colors.secondaryLabel }]}>PROJEÇÃO DE FATURA</Text>
+                  </View>
+                  <Text style={[styles.legendValue, { color: colors.label }]}>
+                    {formatCurrency(totalProjections)}  <Text style={styles.legendPct}>({totalIncome > 0 ? ((totalProjections / totalIncome) * 100).toFixed(0) : 0}%)</Text>
+                  </Text>
+                </View>
+              )}
+            </View>
+            {/* Saldo / Déficit — Rodapé com destaque */}
+            <View style={{
+              borderTopWidth: 1,
+              borderTopColor: colors.separator,
+              paddingHorizontal: 20,
+              paddingVertical: 14,
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              backgroundColor: isDeficit ? `${colors.red}06` : `${colors.green}06`,
+            }}>
+              <Text style={[styles.balanceLabel, { color: isDeficit ? colors.red : colors.green }]}>
+                {isDeficit ? 'DÉFICIT' : 'SALDO DISPONÍVEL'}
+              </Text>
+              <Text style={[styles.balanceValue, { color: isDeficit ? colors.red : colors.green }]}>
+                {formatCurrency(balance)}
+              </Text>
             </View>
           </View>
 
@@ -358,23 +400,16 @@ export default function CashFlowScreen() {
             {incomes.map((item, i) => (
               <View key={item.id}>
                 {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator, marginLeft: 16 }]} />}
-                <TouchableOpacity style={styles.lineRow} onPress={() => openEditModal('income', item)} onLongPress={() => item.id > 0 && handleDelete('income', item.id, item.source)}>
-                  <View style={styles.lineBody}>
-                    <Text style={[styles.lineTitle, { color: colors.label }]}>{item.source}</Text>
-                    <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>{item.type} · {item.note}</Text>
-                  </View>
-                  <Text style={[styles.lineAmount, { color: colors.green }]}>{formatCurrency(item.amount)}</Text>
-                  <View style={styles.rowActions}>
-                    <TouchableOpacity onPress={() => openEditModal('income', item)} hitSlop={{top:8,bottom:8,left:8,right:8}}>
-                      <Ionicons name="pencil" size={16} color={colors.tertiaryLabel} />
-                    </TouchableOpacity>
-                    {item.id > 0 && (
-                      <TouchableOpacity onPress={() => handleDelete('income', item.id, item.source)} hitSlop={{top:8,bottom:8,left:8,right:8}}>
-                        <Ionicons name="trash-outline" size={16} color={colors.red} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </TouchableOpacity>
+                <SwipeableRow onDelete={() => handleDelete('income', item.id, item.source)} enabled={item.id > 0}>
+                  <TouchableOpacity style={styles.lineRow} onPress={() => openEditModal('income', item)} activeOpacity={0.6}>
+                    <View style={styles.lineBody}>
+                      <Text style={[styles.lineTitle, { color: colors.label }]}>{item.source}</Text>
+                      <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>{item.type} · {item.note}</Text>
+                    </View>
+                    <Text style={[styles.lineAmount, { color: colors.green }]}>{formatCurrency(item.amount)}</Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.tertiaryLabel} style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
+                </SwipeableRow>
               </View>
             ))}
             <View style={[styles.sep, { backgroundColor: colors.separator }]} />
@@ -390,23 +425,16 @@ export default function CashFlowScreen() {
             {expenses.map((item, i) => (
               <View key={item.id}>
                 {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator, marginLeft: 16 }]} />}
-                <TouchableOpacity style={styles.lineRow} onPress={() => openEditModal('expense', item)} onLongPress={() => item.id > 0 && handleDelete('expense', item.id, item.description)}>
-                  <View style={styles.lineBody}>
-                    <Text style={[styles.lineTitle, { color: colors.label }]}>{item.description}</Text>
-                    <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>{item.category} · {item.note}</Text>
-                  </View>
-                  <Text style={[styles.lineAmount, { color: colors.label }]}>-{formatCurrency(item.amount)}</Text>
-                  <View style={styles.rowActions}>
-                    <TouchableOpacity onPress={() => openEditModal('expense', item)} hitSlop={{top:8,bottom:8,left:8,right:8}}>
-                      <Ionicons name="pencil" size={16} color={colors.tertiaryLabel} />
-                    </TouchableOpacity>
-                    {item.id > 0 && (
-                      <TouchableOpacity onPress={() => handleDelete('expense', item.id, item.description)} hitSlop={{top:8,bottom:8,left:8,right:8}}>
-                        <Ionicons name="trash-outline" size={16} color={colors.red} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </TouchableOpacity>
+                <SwipeableRow onDelete={() => handleDelete('expense', item.id, item.description)} enabled={item.id > 0}>
+                  <TouchableOpacity style={styles.lineRow} onPress={() => openEditModal('expense', item)} activeOpacity={0.6}>
+                    <View style={styles.lineBody}>
+                      <Text style={[styles.lineTitle, { color: colors.label }]}>{item.description}</Text>
+                      <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>{item.category} · {item.note}</Text>
+                    </View>
+                    <Text style={[styles.lineAmount, { color: colors.label }]}>-{formatCurrency(item.amount)}</Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.tertiaryLabel} style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
+                </SwipeableRow>
               </View>
             ))}
             <View style={[styles.sep, { backgroundColor: colors.separator }]} />
@@ -454,6 +482,42 @@ export default function CashFlowScreen() {
             )}
           </View>
 
+          {/* ── PROJEÇÃO DE FATURA ── */}
+          {projections.length > 0 && (
+            <>
+              <StaticSectionHeader title="Projeção de Fatura" icon="trending-up" />
+              <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, borderLeftWidth: 3, borderLeftColor: '#F5A623' }]}>
+                {projections.map((proj, i) => (
+                  <View key={proj.id}>
+                    {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator, marginLeft: 52 }]} />}
+                    <View style={styles.lineRow}>
+                      <View style={[styles.bankDot, { backgroundColor: proj.bank_color || '#F5A623', opacity: 0.7 }]} />
+                      <View style={styles.lineBody}>
+                        <Text style={[styles.lineTitle, { color: colors.label }]}>
+                          {proj.bank_name || 'Cartão'}{proj.card_last_digits ? ` · ${proj.card_last_digits}` : ''}
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                          <View style={{ backgroundColor: '#F5A62320', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: '#F5A623' }}>PROJEÇÃO</Text>
+                          </View>
+                          <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>
+                            {proj.reference_month} · {proj.transaction_count || 0} transações
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.lineAmount, { color: '#F5A623' }]}>-{formatCurrency(proj.total_amount)}</Text>
+                    </View>
+                  </View>
+                ))}
+                <View style={[styles.sep, { backgroundColor: colors.separator }]} />
+                <View style={[styles.totalRow, { backgroundColor: '#F5A62308' }]}>
+                  <Text style={[styles.totalLabel, { color: colors.label }]}>Total Projeções</Text>
+                  <Text style={[styles.totalValue, { color: '#F5A623' }]}>-{formatCurrency(totalProjections)}</Text>
+                </View>
+              </View>
+            </>
+          )}
+
           {/* ── METAS DE REDUÇÃO ── */}
           <View style={styles.sectionHeader}>
             <Ionicons name="flag" size={18} color={colors.blue} />
@@ -488,38 +552,33 @@ export default function CashFlowScreen() {
                 return (
                   <View key={goal.id}>
                     {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator, marginLeft: 16 }]} />}
-                    <View style={styles.lineRow}>
-                      <View style={styles.lineBody}>
-                        <Text style={[styles.lineTitle, { color: colors.label }]}>
-                          {statusEmoji} {goal.name}
-                        </Text>
-                        <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>
-                          Base: {formatCurrency(goal.baseline_amount)} → Meta: {formatCurrency(goal.target_amount)}
-                        </Text>
-                        <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>
-                          {goal.baseline_month} → {goal.target_month} · Redução: {goal.target_reduction_pct}%
-                        </Text>
-                        {goal.current_amount && (
-                          <Text style={[styles.lineNote, { color: statusColor, fontWeight: '600', marginTop: 2 }]}>
-                            Atual: {formatCurrency(goal.current_amount)} · Progresso: {progress.toFixed(0)}%
+                    <SwipeableRow onDelete={() => handleDeleteGoal(goal.id, goal.name || 'Meta')} enabled={goal.status === 'active'}>
+                      <View style={styles.lineRow}>
+                        <View style={styles.lineBody}>
+                          <Text style={[styles.lineTitle, { color: colors.label }]}>
+                            {statusEmoji} {goal.name}
                           </Text>
-                        )}
-                        {/* Progress bar */}
-                        <View style={[styles.goalProgressBg, { backgroundColor: colors.segmentBg, marginTop: 6 }]}>
-                          <View style={[styles.goalProgressFill, {
-                            backgroundColor: statusColor,
-                            width: `${Math.min(progress, 100)}%`,
-                          }]} />
+                          <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>
+                            Base: {formatCurrency(goal.baseline_amount)} → Meta: {formatCurrency(goal.target_amount)}
+                          </Text>
+                          <Text style={[styles.lineNote, { color: colors.tertiaryLabel }]}>
+                            {goal.baseline_month} → {goal.target_month} · Redução: {goal.target_reduction_pct}%
+                          </Text>
+                          {goal.current_amount && (
+                            <Text style={[styles.lineNote, { color: statusColor, fontWeight: '600', marginTop: 2 }]}>
+                              Atual: {formatCurrency(goal.current_amount)} · Progresso: {progress.toFixed(0)}%
+                            </Text>
+                          )}
+                          {/* Progress bar */}
+                          <View style={[styles.goalProgressBg, { backgroundColor: colors.segmentBg, marginTop: 6 }]}>
+                            <View style={[styles.goalProgressFill, {
+                              backgroundColor: statusColor,
+                              width: `${Math.min(progress, 100)}%`,
+                            }]} />
+                          </View>
                         </View>
                       </View>
-                      <View style={styles.rowActions}>
-                        {goal.status === 'active' && (
-                          <TouchableOpacity onPress={() => handleDeleteGoal(goal.id, goal.name || 'Meta')} hitSlop={{top:8,bottom:8,left:8,right:8}}>
-                            <Ionicons name="trash-outline" size={16} color={colors.red} />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
+                    </SwipeableRow>
                   </View>
                 );
               })}
@@ -637,18 +696,18 @@ export default function CashFlowScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
-  scrollContent: { gap: 8 },
+  scrollContent: { gap: 12 },
   largeTitle: { fontSize: 34, fontWeight: '700', letterSpacing: -1.5, marginBottom: 4 },
-  resultCard: { padding: 20, alignItems: 'center', gap: 4 },
+  resultCard: { padding: 24, alignItems: 'center', gap: 6 },
   resultLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
-  resultValue: { fontSize: 32, fontWeight: '800', letterSpacing: -1 },
+  resultValue: { fontSize: 34, fontWeight: '800', letterSpacing: -1 },
   resultNote: { fontSize: 13, marginTop: 4 },
   card: { overflow: 'hidden' },
   summaryRow: { flexDirection: 'row', padding: 16, gap: 16, alignItems: 'center' },
@@ -658,19 +717,29 @@ const styles = StyleSheet.create({
   sumDivider: { width: 1, height: 36 },
   progressBg: { height: 6, borderRadius: 3, marginHorizontal: 16, marginBottom: 16 },
   progressFill: { height: 6, borderRadius: 3 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 20, marginBottom: 6 },
+  // Legend (composition card)
+  legendRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
+  legendLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  legendDot: { width: 12, height: 12, borderRadius: 6, marginRight: 10 },
+  legendLabel: { fontSize: 13, fontWeight: '600', letterSpacing: 0.3 },
+  legendValue: { fontSize: 17, fontWeight: '700' },
+  legendPct: { fontSize: 14, fontWeight: '500' },
+  balanceLabel: { fontSize: 13, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+  balanceValue: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
+  // Sections
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 24, marginBottom: 8 },
   sectionTitle: { fontSize: 18, fontWeight: '700' },
   addBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  lineRow: { flexDirection: 'row', alignItems: 'center', padding: 12, paddingHorizontal: 16, gap: 12 },
-  lineBody: { flex: 1, gap: 2 },
-  lineTitle: { fontSize: 15, fontWeight: '500' },
-  lineNote: { fontSize: 12 },
-  lineAmount: { fontSize: 15, fontWeight: '600', flexShrink: 0 },
-  rowActions: { flexDirection: 'row', gap: 12, marginLeft: 4 },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 14, paddingHorizontal: 16 },
+  lineRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20, gap: 12 },
+  lineBody: { flex: 1, gap: 3 },
+  lineTitle: { fontSize: 15, fontWeight: '600' },
+  lineNote: { fontSize: 13, lineHeight: 18 },
+  lineAmount: { fontSize: 16, fontWeight: '700', flexShrink: 0 },
+  rowActions: { flexDirection: 'row', gap: 14, marginLeft: 4 },  // kept for potential future use
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20 },
   totalLabel: { fontSize: 15, fontWeight: '700' },
   totalValue: { fontSize: 17, fontWeight: '700' },
-  bankDot: { width: 28, height: 28, borderRadius: 14, flexShrink: 0 },
+  bankDot: { width: 32, height: 32, borderRadius: 16, flexShrink: 0 },
   sep: { height: 0.5 },
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

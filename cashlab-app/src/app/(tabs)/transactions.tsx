@@ -35,14 +35,15 @@ interface Transaction {
   card: string;
   installment: string | null;
   location: string | null;
-  source_type: 'FATURA' | 'PROJECAO_FATURA';
+  source_type: 'FATURA' | 'PROJECAO_FATURA' | 'MANUAL';
 }
 
 type FilterType = 'all' | 'BV' | 'ITAU';
 type MemberFilter = 'all' | 'LUCAS' | 'JURA' | 'JOICE';
-type SourceFilter = 'all' | 'FATURA' | 'PROJECAO_FATURA';
+type SourceFilter = 'all' | 'FATURA' | 'PROJECAO_FATURA' | 'MANUAL';
 
 type ImportStep = 'idle' | 'uploading' | 'preview' | 'confirming';
+type AddMode = 'import' | 'manual';
 interface ImportPreview {
   file_id: string;
   transaction_count: number;
@@ -64,11 +65,21 @@ export default function TransactionsScreen() {
 
   // Screenshot import state
   const [importModalVisible, setImportModalVisible] = useState(false);
+  const [addMode, setAddMode] = useState<AddMode>('import');
   const [importStep, setImportStep] = useState<ImportStep>('idle');
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importBanks, setImportBanks] = useState<BankItem[]>([]);
   const [selectedImportBank, setSelectedImportBank] = useState<string>('');
+  const [imageCount, setImageCount] = useState(0);
+
+  // Manual transaction state
+  const [manualDesc, setManualDesc] = useState('');
+  const [manualAmount, setManualAmount] = useState('');
+  const [manualDate, setManualDate] = useState('');
+  const [manualWho, setManualWho] = useState('LUCAS');
+  const [manualBank, setManualBank] = useState('');
+  const [manualSaving, setManualSaving] = useState(false);
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -107,10 +118,9 @@ export default function TransactionsScreen() {
 
   const totalAmount = transactions.reduce((sum, t) => sum + parseFloat(t.amount), 0);
 
-  // Screenshot import handlers
+  // Screenshot import handlers — multi-image (up to 10)
   const handlePickImage = async () => {
     try {
-      // Request permission
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permissão necessária', 'Precisamos de acesso à sua fototeca para importar prints.');
@@ -119,40 +129,69 @@ export default function TransactionsScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        selectionLimit: 10,
         quality: 0.9,
       });
-      if (result.canceled || !result.assets?.[0]) return;
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
 
-      const asset = result.assets[0];
+      const assets = result.assets.slice(0, 10);
+      setImageCount(assets.length);
       setImportStep('uploading');
       setImportError(null);
 
       const formData = new FormData();
-      const fileName = asset.fileName || `screenshot_${Date.now()}.jpg`;
-      if (Platform.OS === 'web') {
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
-        formData.append('file', blob, fileName);
-      } else {
-        formData.append('file', {
-          uri: asset.uri,
-          name: fileName,
-          type: asset.mimeType || 'image/jpeg',
-        } as any);
+      for (const asset of assets) {
+        const fileName = asset.fileName || `screenshot_${Date.now()}.jpg`;
+        if (Platform.OS === 'web') {
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+          formData.append('files', blob, fileName);
+        } else {
+          formData.append('files', {
+            uri: asset.uri,
+            name: fileName,
+            type: asset.mimeType || 'image/jpeg',
+          } as any);
+        }
       }
 
       const res = await api.post('/transactions/import-screenshot', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60000,
+        timeout: 120000,
       });
 
       setImportPreview(res.data.data);
       setImportStep('preview');
     } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || 'Erro ao processar imagem';
+      const raw = err.response?.data?.detail;
+      const msg = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw.map((e: any) => e.msg || JSON.stringify(e)).join('; ') : err.message || 'Erro ao processar imagem';
       setImportError(msg);
       setImportStep('idle');
     }
+  };
+
+  // Manual transaction handler
+  const handleManualCreate = async () => {
+    if (!manualDesc.trim()) { Alert.alert('Erro', 'Preencha a descrição'); return; }
+    if (!manualAmount.trim() || isNaN(parseFloat(manualAmount))) { Alert.alert('Erro', 'Preencha o valor'); return; }
+    setManualSaving(true);
+    try {
+      await api.post('/transactions/manual', {
+        description: manualDesc.trim(),
+        amount: parseFloat(manualAmount),
+        date: manualDate || undefined,
+        who: manualWho,
+        bank_slug: manualBank || undefined,
+        billing_month: selectedMonth,
+      });
+      setImportModalVisible(false);
+      setManualDesc(''); setManualAmount(''); setManualDate(''); setManualWho('LUCAS'); setManualBank('');
+      Alert.alert('Sucesso', 'Transação criada!');
+      fetchTransactions();
+    } catch (err: any) {
+      Alert.alert('Erro', err.response?.data?.detail || 'Não foi possível criar');
+    } finally { setManualSaving(false); }
   };
 
   const handleConfirmImport = async () => {
@@ -181,6 +220,13 @@ export default function TransactionsScreen() {
     setImportPreview(null);
     setImportError(null);
     setSelectedImportBank('');
+    setImageCount(0);
+  };
+
+  const openAddModal = (mode: AddMode) => {
+    resetImport();
+    setAddMode(mode);
+    setImportModalVisible(true);
   };
 
   return (
@@ -202,7 +248,13 @@ export default function TransactionsScreen() {
             <Text style={[styles.largeTitle, { color: colors.label }]}>Transações</Text>
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: colors.blue }]}
-              onPress={() => { resetImport(); setImportModalVisible(true); }}
+              onPress={() => {
+                Alert.alert('Adicionar Transação', 'Como deseja adicionar?', [
+                  { text: 'Importar Prints', onPress: () => openAddModal('import') },
+                  { text: 'Inserir Manual', onPress: () => openAddModal('manual') },
+                  { text: 'Cancelar', style: 'cancel' },
+                ]);
+              }}
             >
               <Ionicons name="add" size={24} color="#fff" />
             </TouchableOpacity>
@@ -255,20 +307,20 @@ export default function TransactionsScreen() {
               </Pressable>
             ))}
             <View style={styles.chipSpacer} />
-            {(['all', 'FATURA', 'PROJECAO_FATURA'] as SourceFilter[]).map(f => (
+            {(['all', 'FATURA', 'PROJECAO_FATURA', 'MANUAL'] as SourceFilter[]).map(f => (
               <Pressable key={f} onPress={() => setSourceFilter(f)}
                 style={[styles.chip, {
                   backgroundColor: sourceFilter === f ? colors.blue : colors.segmentBg,
                   borderRadius: 20,
                 }]}>
                 <Ionicons
-                  name={f === 'FATURA' ? 'document-text' : f === 'PROJECAO_FATURA' ? 'trending-up' : 'layers'}
+                  name={f === 'FATURA' ? 'document-text' : f === 'PROJECAO_FATURA' ? 'trending-up' : f === 'MANUAL' ? 'create' : 'layers'}
                   size={14}
                   color={sourceFilter === f ? '#fff' : colors.label}
                   style={{ marginRight: 4 }}
                 />
                 <Text style={[styles.chipText, { color: sourceFilter === f ? '#fff' : colors.label }]}>
-                  {f === 'all' ? 'Tipo' : f === 'FATURA' ? 'Fatura' : 'Projeção'}
+                  {f === 'all' ? 'Tipo' : f === 'FATURA' ? 'Fatura' : f === 'PROJECAO_FATURA' ? 'Projeção' : 'Manual'}
                 </Text>
               </Pressable>
             ))}
@@ -321,6 +373,12 @@ export default function TransactionsScreen() {
                                 <Text style={[styles.installText, { color: colors.orange, marginLeft: 2 }]}>Projeção</Text>
                               </View>
                             )}
+                            {tx.source_type === 'MANUAL' && (
+                              <View style={[styles.installBadge, { backgroundColor: `${colors.blue}15` }]}>
+                                <Ionicons name="create" size={10} color={colors.blue} />
+                                <Text style={[styles.installText, { color: colors.blue, marginLeft: 2 }]}>Manual</Text>
+                              </View>
+                            )}
                           </View>
                         </View>
                         <View style={styles.txRight}>
@@ -357,12 +415,14 @@ export default function TransactionsScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* Screenshot Import Modal */}
+      {/* Add Transaction Modal */}
       <Modal visible={importModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.label }]}>Importar Projeção de Fatura</Text>
+              <Text style={[styles.modalTitle, { color: colors.label }]}>
+                {addMode === 'import' ? 'Importar Projeção' : 'Nova Transação'}
+              </Text>
               <TouchableOpacity onPress={() => setImportModalVisible(false)}>
                 <Ionicons name="close-circle" size={28} color={colors.tertiaryLabel} />
               </TouchableOpacity>
@@ -374,9 +434,9 @@ export default function TransactionsScreen() {
               </View>
             )}
 
-            {importStep === 'idle' && (
+            {/* ── IMPORT MODE ── */}
+            {addMode === 'import' && importStep === 'idle' && (
               <>
-                {/* Bank/Card selector */}
                 <Text style={[styles.selectorLabel, { color: colors.secondaryLabel }]}>Selecione o Cartão</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                   <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -397,31 +457,33 @@ export default function TransactionsScreen() {
                 </ScrollView>
                 {importBanks.length === 0 && (
                   <Text style={[{ fontSize: 12, color: colors.tertiaryLabel, marginBottom: 12 }]}>
-                    Nenhum cartão com parser pronto. Vá em Settings para cadastrar.
+                    Nenhum cartão com parser pronto. Vá em Cartões para cadastrar.
                   </Text>
                 )}
                 <TouchableOpacity
                   style={[styles.uploadArea, { borderColor: colors.separator, backgroundColor: `${colors.blue}05` }]}
                   onPress={handlePickImage}
                 >
-                  <Ionicons name="image-outline" size={48} color={colors.blue} />
-                  <Text style={[styles.uploadTitle, { color: colors.label }]}>Selecionar print</Text>
+                  <Ionicons name="images-outline" size={48} color={colors.blue} />
+                  <Text style={[styles.uploadTitle, { color: colors.label }]}>Selecionar prints</Text>
                   <Text style={[styles.uploadSub, { color: colors.secondaryLabel }]}>
-                    Escolha um screenshot das transações do cartão para projeção
+                    Escolha até 10 screenshots das transações do cartão
                   </Text>
                 </TouchableOpacity>
               </>
             )}
 
-            {importStep === 'uploading' && (
+            {addMode === 'import' && importStep === 'uploading' && (
               <View style={styles.loadingBox}>
                 <ActivityIndicator size="large" color={colors.blue} />
-                <Text style={[styles.loadingText, { color: colors.label }]}>Processando com IA...</Text>
+                <Text style={[styles.loadingText, { color: colors.label }]}>
+                  Processando {imageCount} {imageCount === 1 ? 'imagem' : 'imagens'} com IA...
+                </Text>
                 <Text style={[styles.loadingSub, { color: colors.secondaryLabel }]}>Isso pode levar alguns segundos</Text>
               </View>
             )}
 
-            {importStep === 'preview' && importPreview && (
+            {addMode === 'import' && importStep === 'preview' && importPreview && (
               <ScrollView style={{ maxHeight: 400 }}>
                 <Text style={[styles.previewSummary, { color: colors.label }]}>
                   {importPreview.transaction_count} transações • Total: {formatCurrency(importPreview.total_amount)}
@@ -449,11 +511,85 @@ export default function TransactionsScreen() {
               </ScrollView>
             )}
 
-            {importStep === 'confirming' && (
+            {addMode === 'import' && importStep === 'confirming' && (
               <View style={styles.loadingBox}>
                 <ActivityIndicator size="large" color={colors.green} />
                 <Text style={[styles.loadingText, { color: colors.label }]}>Salvando...</Text>
               </View>
+            )}
+
+            {/* ── MANUAL MODE ── */}
+            {addMode === 'manual' && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={[styles.selectorLabel, { color: colors.secondaryLabel }]}>Descrição *</Text>
+                <TextInput
+                  style={[styles.formInput, { color: colors.label, backgroundColor: colors.bg, borderColor: colors.separator }]}
+                  placeholder="Ex: Supermercado Extra"
+                  placeholderTextColor={colors.tertiaryLabel}
+                  value={manualDesc}
+                  onChangeText={setManualDesc}
+                />
+
+                <Text style={[styles.selectorLabel, { color: colors.secondaryLabel }]}>Valor (R$) *</Text>
+                <TextInput
+                  style={[styles.formInput, { color: colors.label, backgroundColor: colors.bg, borderColor: colors.separator }]}
+                  placeholder="0.00"
+                  placeholderTextColor={colors.tertiaryLabel}
+                  value={manualAmount}
+                  onChangeText={setManualAmount}
+                  keyboardType="decimal-pad"
+                />
+
+                <Text style={[styles.selectorLabel, { color: colors.secondaryLabel }]}>Data (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={[styles.formInput, { color: colors.label, backgroundColor: colors.bg, borderColor: colors.separator }]}
+                  placeholder={new Date().toISOString().split('T')[0]}
+                  placeholderTextColor={colors.tertiaryLabel}
+                  value={manualDate}
+                  onChangeText={setManualDate}
+                />
+
+                <Text style={[styles.selectorLabel, { color: colors.secondaryLabel }]}>Membro</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                  {['LUCAS', 'JOICE'].map(m => (
+                    <Pressable key={m}
+                      onPress={() => setManualWho(m)}
+                      style={[styles.chip, {
+                        backgroundColor: manualWho === m ? colors.blue : colors.segmentBg,
+                        borderRadius: 20, flex: 1, justifyContent: 'center',
+                      }]}>
+                      <Text style={[styles.chipText, { color: manualWho === m ? '#fff' : colors.label }]}>{m}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Text style={[styles.selectorLabel, { color: colors.secondaryLabel }]}>Cartão (opcional)</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {importBanks.map(b => (
+                      <Pressable key={b.slug}
+                        onPress={() => setManualBank(manualBank === b.slug ? '' : b.slug)}
+                        style={[styles.chip, {
+                          backgroundColor: manualBank === b.slug ? b.color : colors.segmentBg,
+                          borderRadius: 20,
+                        }]}>
+                        <Text style={[styles.chipText, { color: manualBank === b.slug ? '#fff' : colors.label }]}>
+                          {b.name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+
+                <TouchableOpacity
+                  style={[styles.confirmBtn, { backgroundColor: colors.blue }]}
+                  onPress={handleManualCreate}
+                  disabled={manualSaving}
+                >
+                  {manualSaving ? <ActivityIndicator color="#fff" /> :
+                    <Text style={styles.confirmBtnText}>Criar Transação</Text>}
+                </TouchableOpacity>
+              </ScrollView>
             )}
           </View>
         </View>
@@ -522,4 +658,5 @@ const styles = StyleSheet.create({
   confirmBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cancelBtn: { alignItems: 'center', paddingVertical: 12 },
   cancelBtnText: { fontSize: 15 },
+  formInput: { height: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, marginBottom: 12 },
 });

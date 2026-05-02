@@ -6,9 +6,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator,
-  Alert, Modal, RefreshControl,
+  Alert, Modal, RefreshControl, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as DocumentPicker from 'expo-document-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -18,10 +19,18 @@ import { bankService } from '@/services/bankService';
 import type { UploadPreview, InvoiceListItem, InvoiceDetail } from '@/services/invoiceService';
 import type { BankItem } from '@/services/bankService';
 import { formatCurrency, formatDate } from '@/utils/formatters';
+import { SwipeableRow } from '@/components/common/SwipeableRow';
 
 type Step = 'idle' | 'uploading' | 'preview' | 'confirming' | 'done';
 
+const BANK_COLOR_OPTIONS = ['#F5A623','#FF6B00','#8A05BE','#007AFF','#34C759','#E63946','#2D3436','#00B894'];
 
+const PARSER_STATUS_MAP: Record<string, { label: string; color: string; emoji: string }> = {
+  pending: { label: 'Pendente', color: '#FF9500', emoji: '⏳' },
+  processing: { label: 'Processando...', color: '#007AFF', emoji: '⚙️' },
+  ready: { label: 'Pronto', color: '#34C759', emoji: '✅' },
+  error: { label: 'Erro', color: '#FF3B30', emoji: '❌' },
+};
 
 export default function ImportScreen() {
   const { colors, radius, spacing } = useAppTheme();
@@ -46,11 +55,28 @@ export default function ImportScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Detail modal
+  // Detail modal (invoice)
   const [detailModal, setDetailModal] = useState(false);
   const [detailData, setDetailData] = useState<InvoiceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Add bank modal
+  const [bankModal, setBankModal] = useState(false);
+  const [newBankName, setNewBankName] = useState('');
+  const [newBankColor, setNewBankColor] = useState('#007AFF');
+  const [newClosingDay, setNewClosingDay] = useState('');
+  const [newDueDay, setNewDueDay] = useState('');
+  const [bankSaving, setBankSaving] = useState(false);
+
+  // Detail/Edit bank modal
+  const [bankDetailBank, setBankDetailBank] = useState<BankItem | null>(null);
+  const [bankDetailModal, setBankDetailModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('');
+  const [editClosing, setEditClosing] = useState('');
+  const [editDue, setEditDue] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [retraining, setRetraining] = useState(false);
 
 
   const fetchData = useCallback(async () => {
@@ -160,13 +186,80 @@ export default function ImportScreen() {
     ]);
   };
 
+  // ── Bank CRUD ──
+  const handleCreateBank = async () => {
+    if (!newBankName.trim()) return;
+    setBankSaving(true);
+    try {
+      const cd = newClosingDay ? parseInt(newClosingDay) : undefined;
+      const dd = newDueDay ? parseInt(newDueDay) : undefined;
+      await bankService.create(newBankName.trim(), newBankColor, cd, dd);
+      setBankModal(false);
+      setNewBankName(''); setNewClosingDay(''); setNewDueDay('');
+      fetchData();
+    } catch (err: any) {
+      Alert.alert('Erro', err.response?.data?.detail || 'Erro ao criar cartão');
+    } finally { setBankSaving(false); }
+  };
 
+  const openBankDetail = (bank: BankItem) => {
+    setBankDetailBank(bank);
+    setEditName(bank.name);
+    setEditColor(bank.color);
+    setEditClosing(bank.closing_day ? String(bank.closing_day) : '');
+    setEditDue(bank.due_day ? String(bank.due_day) : '');
+    setBankDetailModal(true);
+  };
+
+  const handleUpdateBank = async () => {
+    if (!bankDetailBank) return;
+    setEditSaving(true);
+    try {
+      await bankService.update(bankDetailBank.id, {
+        name: editName.trim() || undefined,
+        color: editColor || undefined,
+        closing_day: editClosing ? parseInt(editClosing) : undefined,
+        due_day: editDue ? parseInt(editDue) : undefined,
+      });
+      setBankDetailModal(false);
+      fetchData();
+    } catch (err: any) {
+      Alert.alert('Erro', err.response?.data?.detail || 'Erro ao atualizar');
+    } finally { setEditSaving(false); }
+  };
+
+  const handleRetrainParser = async () => {
+    if (!bankDetailBank) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      setRetraining(true);
+      const updated = await bankService.retrain(bankDetailBank.id, asset.uri, asset.name);
+      Alert.alert('Sucesso', updated.message || 'Parser treinado com sucesso');
+      setBankDetailModal(false);
+      fetchData();
+    } catch (err: any) {
+      Alert.alert('Erro', err.response?.data?.detail || 'Erro ao treinar parser');
+    } finally { setRetraining(false); }
+  };
+
+  const handleDeleteBank = (id: number, name: string) => {
+    Alert.alert('Excluir Cartão', `Remover "${name}"?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: async () => {
+        try { await bankService.remove(id); fetchData(); } catch (err: any) {
+          Alert.alert('Erro', err.response?.data?.detail || 'Não foi possível excluir');
+        }
+      }},
+    ]);
+  };
 
   const bankLabel = (b: string) => ({ bv: 'Banco BV', itau: 'Itaú', nubank: 'Nubank' }[b] || b);
   const fmtSize = (b: number | null) => b ? (b > 1024*1024 ? `${(b/1024/1024).toFixed(1)} MB` : `${Math.round(b/1024)} KB`) : '';
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.bg }]}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]}
           showsVerticalScrollIndicator={false}
@@ -296,39 +389,212 @@ export default function ImportScreen() {
               <Text style={[styles.sectionLabel, { color: colors.secondaryLabel }]}>FATURAS IMPORTADAS</Text>
               {loading && <ActivityIndicator style={{ marginVertical: 12 }} color={colors.blue} />}
               {invoices.map((inv) => (
-                <Pressable key={inv.id}
-                  style={({ pressed }) => [styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, opacity: pressed ? 0.9 : 1, marginBottom: 8 }]}
-                  onPress={() => openDetail(inv.id)}>
-                  <View style={styles.invRow}>
-                    <View style={[styles.bankDot, { backgroundColor: colors.blue }]} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.invTitle, { color: colors.label }]}>
-                        {inv.bank_name || 'Cartão'} · {inv.card_last_digits || '****'}
-                      </Text>
-                      <Text style={[styles.invSub, { color: colors.secondaryLabel }]}>
-                        {inv.reference_month} · {inv.transaction_count} transações{inv.file_size ? ` · ${fmtSize(inv.file_size)}` : ''}
-                      </Text>
+                <SwipeableRow key={inv.id} onDelete={() => handleDeleteInvoice(inv.id)}>
+                  <Pressable
+                    style={({ pressed }) => [styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, opacity: pressed ? 0.9 : 1, marginBottom: 8 }]}
+                    onPress={() => openDetail(inv.id)}>
+                    <View style={styles.invRow}>
+                      <View style={[styles.bankDot, { backgroundColor: colors.blue }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.invTitle, { color: colors.label }]}>
+                          {inv.bank_name || 'Cartão'} · {inv.card_last_digits || '****'}
+                        </Text>
+                        <Text style={[styles.invSub, { color: colors.secondaryLabel }]}>
+                          {inv.reference_month} · {inv.transaction_count} transações{inv.file_size ? ` · ${fmtSize(inv.file_size)}` : ''}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={[styles.invAmount, { color: colors.red }]}>{formatCurrency(inv.total_amount)}</Text>
+                        <Text style={[styles.invDate, { color: colors.tertiaryLabel }]}>
+                          {inv.created_at ? new Date(inv.created_at).toLocaleDateString('pt-BR') : ''}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.tertiaryLabel} style={{ marginLeft: 4 }} />
                     </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={[styles.invAmount, { color: colors.red }]}>{formatCurrency(inv.total_amount)}</Text>
-                      <Text style={[styles.invDate, { color: colors.tertiaryLabel }]}>
-                        {inv.created_at ? new Date(inv.created_at).toLocaleDateString('pt-BR') : ''}
-                      </Text>
-                    </View>
-                    <Pressable onPress={(e) => { e.stopPropagation(); handleDeleteInvoice(inv.id); }} hitSlop={12} style={{ marginLeft: 8 }}>
-                      <Ionicons name="trash-outline" size={18} color={colors.red} />
-                    </Pressable>
-                  </View>
-                </Pressable>
+                  </Pressable>
+                </SwipeableRow>
               ))}
             </>
           )}
 
-
+          {/* ── CARTÕES CADASTRADOS ── */}
+          {step === 'idle' && (
+            <>
+              <View style={[styles.sectionRow, { marginTop: 24 }]}>
+                <Text style={[styles.sectionLabel, { color: colors.secondaryLabel, marginTop: 0 }]}>CARTÕES</Text>
+                <Pressable onPress={() => setBankModal(true)} hitSlop={12}>
+                  <Ionicons name="add-circle" size={22} color={colors.blue} />
+                </Pressable>
+              </View>
+              {loading && <ActivityIndicator style={{ marginVertical: 8 }} color={colors.blue} />}
+              <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg }]}>
+                {banks.length === 0 && !loading && (
+                  <View style={{ padding: 16, alignItems: 'center' }}>
+                    <Text style={[styles.invSub, { color: colors.tertiaryLabel }]}>Nenhum cartão cadastrado</Text>
+                  </View>
+                )}
+                {banks.map((b, i) => {
+                  const ps = PARSER_STATUS_MAP[b.parser_status] || PARSER_STATUS_MAP.pending;
+                  return (
+                    <View key={b.id}>
+                      {i > 0 && <View style={[styles.sep, { backgroundColor: colors.separator, marginLeft: 52 }]} />}
+                      <Pressable style={styles.bankRow} onPress={() => openBankDetail(b)}>
+                        <View style={[styles.bankDot, { backgroundColor: b.color }]} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.bankName, { color: colors.label }]}>{b.name}</Text>
+                          <Text style={[styles.invSub, { color: colors.tertiaryLabel }]}>
+                            {b.closing_day ? `Fech. dia ${b.closing_day}` : ''}{b.closing_day && b.due_day ? ' · ' : ''}{b.due_day ? `Venc. dia ${b.due_day}` : ''}
+                            {b.invoice_count > 0 ? ` · ${b.invoice_count} fatura(s)` : ''}
+                          </Text>
+                        </View>
+                        <View style={[styles.statusBadge, { backgroundColor: `${ps.color}20` }]}>
+                          <Text style={[styles.statusText, { color: ps.color }]}>{ps.emoji} {ps.label}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={colors.tertiaryLabel} style={{ marginLeft: 6 }} />
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            </>
+          )}
 
           <View style={{ height: 100 }} />
         </ScrollView>
       </SafeAreaView>
+
+      {/* ── ADD BANK MODAL ── */}
+      <Modal visible={bankModal} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.formModal, { backgroundColor: colors.surface, borderRadius: radius.xl }]}>
+            <Text style={[styles.modalTitle, { color: colors.label, marginBottom: 16 }]}>Novo Cartão</Text>
+            <TextInput style={[styles.input, { backgroundColor: colors.bg, color: colors.label, borderRadius: radius.md }]}
+              placeholder="Nome do cartão (ex: Itaú, BV)" placeholderTextColor={colors.tertiaryLabel}
+              value={newBankName} onChangeText={setNewBankName} />
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Dia Fechamento</Text>
+                <TextInput style={[styles.input, { backgroundColor: colors.bg, color: colors.label, borderRadius: radius.md }]}
+                  placeholder="Ex: 03" placeholderTextColor={colors.tertiaryLabel} keyboardType="number-pad"
+                  value={newClosingDay} onChangeText={setNewClosingDay} maxLength={2} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Dia Vencimento</Text>
+                <TextInput style={[styles.input, { backgroundColor: colors.bg, color: colors.label, borderRadius: radius.md }]}
+                  placeholder="Ex: 09" placeholderTextColor={colors.tertiaryLabel} keyboardType="number-pad"
+                  value={newDueDay} onChangeText={setNewDueDay} maxLength={2} />
+              </View>
+            </View>
+            <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Cor</Text>
+            <View style={styles.colorRow}>
+              {BANK_COLOR_OPTIONS.map(c => (
+                <Pressable key={c} onPress={() => setNewBankColor(c)}
+                  style={[styles.colorOption, { backgroundColor: c, borderWidth: newBankColor === c ? 3 : 0, borderColor: '#fff' }]} />
+              ))}
+            </View>
+            <Text style={[styles.footnote, { color: colors.tertiaryLabel, marginBottom: 16 }]}>
+              Após criar, envie um PDF de fatura para treinar o parser.
+            </Text>
+            <View style={styles.formActions}>
+              <Pressable onPress={() => setBankModal(false)} style={styles.cancelBtn}>
+                <Text style={[{ color: colors.red, fontSize: 15 }]}>Cancelar</Text>
+              </Pressable>
+              <Pressable style={[styles.saveBtn, { backgroundColor: colors.blue, borderRadius: radius.md }]}
+                onPress={handleCreateBank} disabled={bankSaving}>
+                {bankSaving ? <ActivityIndicator size="small" color="#fff" /> :
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>Criar</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── BANK DETAIL/EDIT MODAL ── */}
+      <Modal visible={bankDetailModal} animationType="slide" presentationStyle="pageSheet">
+        <View style={[styles.modalContainer, { backgroundColor: colors.bg }]}>
+          <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.separator }]}>
+              <Text style={[styles.modalTitle, { color: colors.label }]}>Detalhes do Cartão</Text>
+              <Pressable onPress={() => setBankDetailModal(false)}>
+                <Ionicons name="close-circle" size={28} color={colors.secondaryLabel} />
+              </Pressable>
+            </View>
+            {bankDetailBank && (
+              <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
+                {/* Status do parser */}
+                <View style={[styles.card, { backgroundColor: colors.surface, borderRadius: radius.lg, padding: 16, marginBottom: 16, alignItems: 'center' }]}>
+                  {(() => { const ps = PARSER_STATUS_MAP[bankDetailBank.parser_status] || PARSER_STATUS_MAP.pending; return (
+                    <>
+                      <Text style={{ fontSize: 32 }}>{ps.emoji}</Text>
+                      <Text style={[styles.bankName, { color: ps.color, marginTop: 4 }]}>{ps.label}</Text>
+                      {bankDetailBank.parser_trained_at && (
+                        <Text style={[styles.invSub, { color: colors.tertiaryLabel, marginTop: 4 }]}>
+                          Último treinamento: {new Date(bankDetailBank.parser_trained_at).toLocaleDateString('pt-BR')}
+                        </Text>
+                      )}
+                      <Text style={[styles.invSub, { color: colors.tertiaryLabel, marginTop: 2 }]}>
+                        {bankDetailBank.invoice_count} fatura(s) importada(s)
+                      </Text>
+                    </>
+                  ); })()}
+                </View>
+
+                {/* Campos editáveis */}
+                <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Nome</Text>
+                <TextInput style={[styles.input, { backgroundColor: colors.surface, color: colors.label, borderRadius: radius.md }]}
+                  value={editName} onChangeText={setEditName} editable={!bankDetailBank.has_native_parser} />
+
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Dia Fechamento</Text>
+                    <TextInput style={[styles.input, { backgroundColor: colors.surface, color: colors.label, borderRadius: radius.md }]}
+                      value={editClosing} onChangeText={setEditClosing} keyboardType="number-pad" maxLength={2} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Dia Vencimento</Text>
+                    <TextInput style={[styles.input, { backgroundColor: colors.surface, color: colors.label, borderRadius: radius.md }]}
+                      value={editDue} onChangeText={setEditDue} keyboardType="number-pad" maxLength={2} />
+                  </View>
+                </View>
+
+                <Text style={[styles.colorLabel, { color: colors.secondaryLabel }]}>Cor</Text>
+                <View style={[styles.colorRow, { marginBottom: 24 }]}>
+                  {BANK_COLOR_OPTIONS.map(c => (
+                    <Pressable key={c} onPress={() => setEditColor(c)}
+                      style={[styles.colorOption, { backgroundColor: c, borderWidth: editColor === c ? 3 : 0, borderColor: '#fff' }]} />
+                  ))}
+                </View>
+
+                {/* Actions */}
+                <Pressable style={[styles.actionBtn, { backgroundColor: colors.blue, borderRadius: radius.md }]}
+                  onPress={handleUpdateBank} disabled={editSaving}>
+                  {editSaving ? <ActivityIndicator size="small" color="#fff" /> :
+                    <Text style={styles.actionBtnText}>Salvar Alterações</Text>}
+                </Pressable>
+
+                <Pressable style={[styles.actionBtn, { backgroundColor: `${colors.orange}15`, borderRadius: radius.md, marginTop: 12 }]}
+                  onPress={handleRetrainParser} disabled={retraining}>
+                  {retraining ? <ActivityIndicator size="small" color={colors.orange} /> : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Ionicons name="refresh" size={18} color={colors.orange} />
+                      <Text style={[styles.actionBtnText, { color: colors.orange }]}>Retreinar Parser (enviar PDF)</Text>
+                    </View>
+                  )}
+                </Pressable>
+
+                {!bankDetailBank.has_native_parser && (
+                  <Pressable style={[styles.actionBtn, { backgroundColor: `${colors.red}10`, borderRadius: radius.md, marginTop: 12 }]}
+                    onPress={() => { setBankDetailModal(false); handleDeleteBank(bankDetailBank.id, bankDetailBank.name); }}>
+                    <Text style={[styles.actionBtnText, { color: colors.red }]}>Excluir Cartão</Text>
+                  </Pressable>
+                )}
+
+                <View style={{ height: 50 }} />
+              </ScrollView>
+            )}
+          </SafeAreaView>
+        </View>
+      </Modal>
 
       {/* ── DETAIL MODAL ── */}
       <Modal visible={detailModal} animationType="slide" presentationStyle="pageSheet">
@@ -477,7 +743,7 @@ export default function ImportScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -550,4 +816,7 @@ const styles = StyleSheet.create({
   formActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   saveBtn: { paddingHorizontal: 24, paddingVertical: 10 },
   chipBtn: { paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
+  actionBtn: { height: 48, justifyContent: 'center', alignItems: 'center' },
+  actionBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  footnote: { fontSize: 13, lineHeight: 18 },
 });
